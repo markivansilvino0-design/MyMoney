@@ -62,7 +62,7 @@ export default async function SavingsGoalDetailPage({ params, searchParams }: {
       </section>
 
       <section className="panel" style={{ marginTop: 16 }}>
-        <div className="goal-meta"><strong>{money(current)} of {money(target)}</strong><span>{pct.toFixed(0)}%</span></div>
+        <div className="goal-meta"><strong>{money(current)} of {money(target)}</strong><span>{pct > 0 && pct < 10 ? pct.toFixed(1) : pct.toFixed(0)}%</span></div>
         <div className="progress-track" style={{ marginTop: 10 }}><div className="progress-bar" style={{ width: `${pct}%` }} /></div>
         <div className="goal-metrics">
           <div><span className="muted">Deposits</span><strong>{money(deposits)}</strong></div>

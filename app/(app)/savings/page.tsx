@@ -19,7 +19,7 @@ export default async function SavingsPage({ searchParams }: { searchParams: Prom
 
   return (
     <main className="main">
-      <div className="page-heading"><div><h2>Savings</h2><p>Set goals, reserve money, or physically transfer it into a savings account.</p></div><Link className="primary-btn" href="/transactions?prefill=savings">+ Savings activity</Link></div>
+      <div className="page-heading"><div><div className="eyebrow">Grow</div><h2>Savings</h2><p>Set goals, reserve money, or physically transfer it into a savings account.</p></div><Link className="primary-btn" href="/transactions?prefill=savings">+ Savings activity</Link></div>
       {notices.error && <div className="notice error page-notice">{notices.error}</div>}
       {notices.success && <div className="notice success page-notice">{notices.success}</div>}
 
@@ -52,7 +52,7 @@ export default async function SavingsPage({ searchParams }: { searchParams: Prom
               return (
                 <Link className="goal-card goal-card-link" href={`/savings/${goal.id}`} key={goal.id}>
                   <div className="goal-meta"><strong>{goal.name}</strong><span className={`status-badge status-${goal.status}`}>{statusLabel(goal.status)}</span></div>
-                  <div className="goal-meta"><span className="muted">Progress</span><strong>{pct.toFixed(0)}%</strong></div>
+                  <div className="goal-meta"><span className="muted">Progress</span><strong>{pct > 0 && pct < 10 ? pct.toFixed(1) : pct.toFixed(0)}%</strong></div>
                   <div className="progress-track"><div className="progress-bar" style={{ width: `${pct}%` }} /></div>
                   <div className="goal-amounts"><strong>{money(current)}</strong><span className="muted">of {money(target)}</span></div>
                   <div className="muted">Remaining: {money(Math.max(target - current, 0))}</div>
