@@ -25,7 +25,7 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
 
   return (
     <main className="main">
-      <div className="page-heading"><div><h2>Accounts</h2><p>See where your money is held and open any account for its activity.</p></div></div>
+      <div className="page-heading"><div><div className="eyebrow">Manage</div><h2>Accounts</h2><p>See where your money is held and open any account for its activity.</p></div></div>
       {notices.error && <div className="notice error page-notice">{notices.error}</div>}
       {notices.success && <div className="notice success page-notice">{notices.success}</div>}
 
