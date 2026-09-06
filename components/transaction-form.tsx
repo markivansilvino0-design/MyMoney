@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { useFormStatus } from "react-dom";
 import { createMoneyEntry, updateMoneyEntry } from "@/app/(app)/transactions/actions";
 
 type Account = { id: string; name: string; account_type: string; is_active?: boolean };
@@ -11,6 +12,16 @@ type Goal = { id: string; name: string; target_amount: number; current_amount: n
 type EntryType = "income" | "expense" | "transfer" | "savings";
 type SavingsEntryType = "deposit" | "withdrawal";
 type SavingMode = "earmark" | "transfer";
+
+
+function TransactionSubmitButton({ isEdit, disabled }: { isEdit: boolean; disabled: boolean }) {
+  const { pending } = useFormStatus();
+  return (
+    <button className="primary-btn" type="submit" disabled={disabled || pending} aria-busy={pending}>
+      {pending ? "Saving..." : isEdit ? "Save changes" : "Save transaction"}
+    </button>
+  );
+}
 
 type InitialEntry = {
   id: string;
@@ -196,7 +207,7 @@ export function TransactionForm({
       {savingsUnavailable && <div className="notice error">You do not have an active savings goal. <Link href="/savings"><strong>Create or reactivate a savings goal</strong></Link> first.</div>}
       {transferUnavailable && <div className="notice error">This transfer needs at least two accounts. <Link href="/accounts"><strong>Add another account</strong></Link> first.</div>}
 
-      <div className="form-actions"><button className="primary-btn" type="submit" disabled={noAccounts || savingsUnavailable || transferUnavailable}>{isEdit ? "Save changes" : "Save transaction"}</button></div>
+      <div className="form-actions"><TransactionSubmitButton isEdit={isEdit} disabled={noAccounts || savingsUnavailable || transferUnavailable} /></div>
     </form>
   );
 }
