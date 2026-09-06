@@ -147,3 +147,125 @@ td { padding: 13px 10px; border-bottom: 1px solid #f0f2f5; }
   .cards { grid-template-columns: 1fr 1fr; gap: 10px; }
   .stat-value { font-size: 20px; }
 }
+
+/* Phase 3: Transaction Center */
+.field select, .field textarea, .filter-grid input, .filter-grid select {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  padding: 11px 12px;
+  background: white;
+  outline: none;
+  color: var(--text);
+}
+.field textarea { resize: vertical; }
+.field select:focus, .field textarea:focus, .filter-grid input:focus, .filter-grid select:focus {
+  border-color: #8aacfb;
+  box-shadow: 0 0 0 3px #edf3ff;
+}
+.transaction-entry-panel { padding: 22px; }
+.section-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+.section-heading h3 { margin: 0 0 5px; }
+.section-heading p { margin: 0; font-size: 13px; }
+.transaction-form { display: grid; gap: 16px; }
+.form-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.form-actions { display: flex; justify-content: flex-end; }
+.form-actions .primary-btn { min-width: 150px; }
+.primary-btn:disabled { cursor: not-allowed; opacity: .55; }
+.page-notice { margin-bottom: 16px; }
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(120px, 1fr));
+  gap: 12px;
+  padding: 14px;
+  margin-bottom: 18px;
+  border-radius: 13px;
+  background: #fafbfc;
+  border: 1px solid var(--border);
+}
+.filter-grid .field { gap: 5px; }
+.filter-search { grid-column: span 2; }
+.filter-actions { display: flex; align-items: end; gap: 8px; }
+.text-btn { display: inline-flex; align-items: center; justify-content: center; padding: 11px 8px; color: var(--accent); font-weight: 700; font-size: 13px; }
+.transaction-table td a { display: block; padding: 1px 0; }
+.clickable-row { cursor: pointer; }
+.clickable-row:hover td { background: #f8faff; }
+.amount-cell { text-align: right; white-space: nowrap; font-weight: 800; }
+.type-badge { display: inline-flex; align-items: center; border-radius: 999px; padding: 5px 8px; font-size: 11px; font-weight: 800; }
+.type-income { background: #eaf8f1; color: #0c7a4c; }
+.type-expense { background: #fff0f0; color: #b53c40; }
+.type-transfer { background: #eef3ff; color: #315fc0; }
+.type-savings { background: #fff7e9; color: #9a6514; }
+.back-link { display: inline-block; color: var(--accent); font-size: 13px; font-weight: 700; margin-bottom: 8px; }
+.detail-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.detail-value { margin-top: 9px; font-size: 17px; font-weight: 800; overflow-wrap: anywhere; }
+.danger-zone {
+  margin-top: 16px;
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border: 1px solid #ffd4d4;
+  border-radius: 16px;
+  background: #fff8f8;
+}
+.danger-zone p { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
+.danger-btn { border: 1px solid #e9a9aa; border-radius: 10px; background: white; color: var(--negative); padding: 10px 14px; cursor: pointer; font-weight: 800; }
+.danger-btn:hover { background: #fff0f0; }
+
+@media (max-width: 1150px) {
+  .form-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .filter-grid { grid-template-columns: repeat(3, minmax(120px,1fr)); }
+  .detail-summary { grid-template-columns: repeat(2, minmax(0,1fr)); }
+}
+@media (max-width: 760px) {
+  .form-grid, .filter-grid, .detail-summary { grid-template-columns: 1fr; }
+  .filter-search { grid-column: auto; }
+  .filter-actions { align-items: center; }
+  .transaction-entry-panel, .panel { padding: 16px; }
+  .danger-zone { align-items: flex-start; flex-direction: column; }
+  .danger-btn { width: 100%; }
+  .danger-zone form { width: 100%; }
+}
+.compact-form { align-items: end; }
+.savings-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 720px; }
+.goal-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px; }
+.goal-card { border: 1px solid var(--border); border-radius: 14px; padding: 17px; background: #fafbfc; display: grid; gap: 10px; }
+.goal-card p { margin: 0; font-size: 13px; }
+.goal-amounts { display: flex; align-items: baseline; gap: 6px; }
+.goal-date { font-size: 12px; }
+@media (max-width: 760px) { .goal-grid, .savings-cards { grid-template-columns: 1fr; } }
+
+/* Phase 4: Accounts & Savings functionality */
+.notice.info { background: #eef6ff; color: #315f9b; border: 1px solid #d9e8ff; }
+.account-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.account-card { border: 1px solid var(--border); border-radius: 14px; padding: 18px; background: #fafbfc; display: grid; gap: 8px; transition: border-color .15s ease, transform .15s ease; }
+.account-card:hover { border-color: #cbd8f4; transform: translateY(-1px); }
+.account-card-balance { font-size: 24px; font-weight: 800; margin-top: 4px; }
+.account-card-footer { margin-top: 8px; color: var(--accent); font-size: 13px; font-weight: 750; }
+.account-type-label { text-transform: capitalize; font-size: 12px; }
+.goal-card-link { color: inherit; }
+.goal-card-link:hover { border-color: #cbd8f4; }
+.status-badge { display: inline-flex; align-items: center; padding: 4px 8px; border-radius: 999px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+.status-active { background: #eaf8f1; color: #0c7a4c; }
+.status-paused { background: #fff7e9; color: #9a6514; }
+.status-completed { background: #eef3ff; color: #315fc0; }
+.status-archived, .status-muted { background: #eef0f3; color: #667085; }
+.goal-metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
+.goal-metrics > div { display: grid; gap: 5px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: #fafbfc; }
+.goal-metrics strong { font-size: 14px; }
+.danger-actions { display: flex; gap: 8px; align-items: center; }
+button:disabled { cursor: not-allowed; opacity: .55; }
+
+@media (max-width: 1100px) {
+  .account-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .goal-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .account-grid, .goal-metrics { grid-template-columns: 1fr; }
+  .danger-actions { width: 100%; flex-direction: column; }
+  .danger-actions form, .danger-actions button { width: 100%; }
+}
+.heading-actions { display: flex; gap: 8px; align-items: center; }
+@media (max-width: 760px) { .heading-actions { width: 100%; } .heading-actions a { flex: 1; } }
