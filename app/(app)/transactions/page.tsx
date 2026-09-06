@@ -26,6 +26,7 @@ function typeLabel(type: string, entryType?: string) {
   if (type === "income") return "Income";
   if (type === "expense") return "Expense";
   if (type === "transfer") return "Transfer";
+  if (type === "credit_card") return entryType === "payment" ? "Card payment" : entryType === "refund" ? "Card refund" : entryType === "fee" ? "Card fee" : entryType === "interest" ? "Card interest" : "Card purchase";
   return entryType === "withdrawal" ? "Savings withdrawal" : "Savings deposit";
 }
 
@@ -33,11 +34,12 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
   const params = await searchParams;
   const supabase = await createClient();
 
-  const [{ data: accounts }, { data: categories }, { data: owners }, { data: goals }] = await Promise.all([
+  const [{ data: accounts }, { data: categories }, { data: owners }, { data: goals }, { data: creditCards }] = await Promise.all([
     supabase.from("accounts").select("id,name,account_type,is_active").order("is_active", { ascending: false }).order("name"),
     supabase.from("categories").select("id,name,category_type").eq("is_active", true).order("category_type").order("name"),
     supabase.from("owners").select("id,name,is_default").eq("is_active", true).order("is_default", { ascending: false }).order("name"),
     supabase.from("savings_goals").select("id,name,target_amount,current_amount,status").order("name"),
+    supabase.from("credit_cards").select("id,name").order("name"),
   ]);
 
   const accountRows = accounts ?? [];
@@ -49,25 +51,29 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
 
   let txQuery = supabase.from("transactions").select("id,transaction_date,transaction_type,account_id,to_account_id,category_id,owner_id,amount,description,need_want,fixed_variable,created_at").order("transaction_date", { ascending: false }).order("created_at", { ascending: false }).limit(120);
   let svQuery = supabase.from("savings_contributions").select("id,contribution_date,from_account_id,to_account_id,savings_goal_id,entry_type,saving_mode,amount,description,notes,created_at").order("contribution_date", { ascending: false }).order("created_at", { ascending: false }).limit(120);
+  let ccQuery = supabase.from("credit_card_transactions").select("id,credit_card_id,activity_date,activity_type,account_id,category_id,owner_id,amount,description,created_at").lte("activity_date", manilaToday()).order("activity_date", { ascending: false }).order("created_at", { ascending: false }).limit(120);
 
-  if (params.from) { txQuery = txQuery.gte("transaction_date", params.from); svQuery = svQuery.gte("contribution_date", params.from); }
-  if (params.to) { txQuery = txQuery.lte("transaction_date", params.to); svQuery = svQuery.lte("contribution_date", params.to); }
-  if (params.account) { txQuery = txQuery.or(`account_id.eq.${params.account},to_account_id.eq.${params.account}`); svQuery = svQuery.or(`from_account_id.eq.${params.account},to_account_id.eq.${params.account}`); }
-  if (params.category) txQuery = txQuery.eq("category_id", params.category);
-  if (params.owner) txQuery = txQuery.eq("owner_id", params.owner);
-  if (params.type && params.type !== "all" && params.type !== "savings") txQuery = txQuery.eq("transaction_type", params.type);
+  if (params.from) { txQuery = txQuery.gte("transaction_date", params.from); svQuery = svQuery.gte("contribution_date", params.from); ccQuery = ccQuery.gte("activity_date", params.from); }
+  if (params.to) { txQuery = txQuery.lte("transaction_date", params.to); svQuery = svQuery.lte("contribution_date", params.to); ccQuery = ccQuery.lte("activity_date", params.to); }
+  if (params.account) { txQuery = txQuery.or(`account_id.eq.${params.account},to_account_id.eq.${params.account}`); svQuery = svQuery.or(`from_account_id.eq.${params.account},to_account_id.eq.${params.account}`); ccQuery = ccQuery.eq("activity_type", "payment").eq("account_id", params.account); }
+  if (params.category) { txQuery = txQuery.eq("category_id", params.category); ccQuery = ccQuery.eq("category_id", params.category); }
+  if (params.owner) { txQuery = txQuery.eq("owner_id", params.owner); ccQuery = ccQuery.eq("owner_id", params.owner); }
+  if (params.type && params.type !== "all" && params.type !== "savings" && params.type !== "credit_card") txQuery = txQuery.eq("transaction_type", params.type);
 
-  const includeTransactions = params.type !== "savings";
+  const includeTransactions = params.type !== "savings" && params.type !== "credit_card";
   const includeSavings = (!params.type || params.type === "all" || params.type === "savings") && !params.category && !params.owner;
-  const [{ data: txData }, { data: svData }] = await Promise.all([
+  const includeCards = !params.type || params.type === "all" || params.type === "credit_card";
+  const [{ data: txData }, { data: svData }, { data: ccData }] = await Promise.all([
     includeTransactions ? txQuery : Promise.resolve({ data: [] as never[] }),
     includeSavings ? svQuery : Promise.resolve({ data: [] as never[] }),
+    includeCards ? ccQuery : Promise.resolve({ data: [] as never[] }),
   ]);
 
   const accountMap = new Map(accountRows.map((account) => [account.id, account.name]));
   const categoryMap = new Map(categoryRows.map((category) => [category.id, category.name]));
   const ownerMap = new Map(ownerRows.map((owner) => [owner.id, owner.name]));
   const goalMap = new Map(allGoalRows.map((goal) => [goal.id, goal.name]));
+  const cardMap = new Map((creditCards ?? []).map((card) => [card.id, card.name]));
 
   const combined = [
     ...(txData ?? []).map((row) => ({
@@ -84,6 +90,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
         ? `${accountMap.get(row.account_id ?? "") ?? "—"} → ${accountMap.get(row.to_account_id ?? "") ?? "—"}`
         : accountMap.get(row.account_id ?? "") ?? "—",
       created_at: row.created_at,
+      href: `/transactions/tx/${row.id}`,
     })),
     ...(svData ?? []).map((row) => {
       const from = accountMap.get(row.from_account_id ?? "") ?? "—";
@@ -100,8 +107,23 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
         owner: "—",
         account: row.saving_mode === "transfer" ? `${from} → ${to}` : `Earmarked in ${from}`,
         created_at: row.created_at,
+        href: `/transactions/sv/${row.id}`,
       };
     }),
+    ...(ccData ?? []).map((row) => ({
+      kind: "cc" as const,
+      id: row.id,
+      date: row.activity_date,
+      type: "credit_card",
+      entryType: row.activity_type,
+      amount: Number(row.amount),
+      description: row.description || typeLabel("credit_card", row.activity_type),
+      category: row.category_id ? categoryMap.get(row.category_id) ?? "—" : "—",
+      owner: row.owner_id ? ownerMap.get(row.owner_id) ?? "—" : "—",
+      account: row.activity_type === "payment" ? `${accountMap.get(row.account_id ?? "") ?? "—"} → ${cardMap.get(row.credit_card_id) ?? "Credit card"}` : cardMap.get(row.credit_card_id) ?? "Credit card",
+      created_at: row.created_at,
+      href: `/credit-cards/${row.credit_card_id}`,
+    })),
   ]
     .filter((row) => {
       const q = params.q?.trim().toLowerCase();
@@ -115,7 +137,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
 
   return (
     <main className="main">
-      <div className="page-heading"><div><div className="eyebrow">Activity</div><h2>Transactions</h2><p>Record income, expenses, transfers and savings in one place.</p></div></div>
+      <div className="page-heading"><div><div className="eyebrow">Activity</div><h2>Transactions</h2><p>Record income, expenses, transfers and savings; posted card activity appears in the history below.</p></div></div>
 
       {params.error && <div className="notice error page-notice">{params.error}</div>}
       {params.success && <div className="notice success page-notice">{params.success}</div>}
@@ -140,7 +162,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
         <form method="get" className="filter-grid">
           <div className="field"><label>From</label><input type="date" name="from" defaultValue={params.from ?? ""} /></div>
           <div className="field"><label>To</label><input type="date" name="to" defaultValue={params.to ?? ""} /></div>
-          <div className="field"><label>Type</label><select name="type" defaultValue={params.type ?? "all"}><option value="all">All</option><option value="income">Income</option><option value="expense">Expense</option><option value="transfer">Transfer</option><option value="savings">Savings</option></select></div>
+          <div className="field"><label>Type</label><select name="type" defaultValue={params.type ?? "all"}><option value="all">All</option><option value="income">Income</option><option value="expense">Expense</option><option value="transfer">Transfer</option><option value="savings">Savings</option><option value="credit_card">Credit Card</option></select></div>
           <div className="field"><label>Account</label><select name="account" defaultValue={params.account ?? ""}><option value="">All accounts</option>{accountRows.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</select></div>
           <div className="field"><label>Category</label><select name="category" defaultValue={params.category ?? ""}><option value="">All categories</option>{categoryRows.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></div>
           <div className="field"><label>Owner</label><select name="owner" defaultValue={params.owner ?? ""}><option value="">All owners</option>{ownerRows.map((owner) => <option key={owner.id} value={owner.id}>{owner.name}</option>)}</select></div>
@@ -152,16 +174,18 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
           <div className="table-wrap"><table className="transaction-table"><thead><tr><th>Date</th><th>Description</th><th>Type</th><th>Category / Goal</th><th>Account</th><th>Owner</th><th>Amount</th></tr></thead><tbody>
             {combined.map((row) => {
               const savingsWithdrawal = row.type === "savings" && row.entryType === "withdrawal";
-              const positive = row.type === "income" || savingsWithdrawal;
-              const negative = row.type === "expense" || (row.type === "savings" && !savingsWithdrawal);
+              const cardRefund = row.type === "credit_card" && row.entryType === "refund";
+              const cardPayment = row.type === "credit_card" && row.entryType === "payment";
+              const positive = row.type === "income" || savingsWithdrawal || cardRefund;
+              const negative = row.type === "expense" || (row.type === "savings" && !savingsWithdrawal) || (row.type === "credit_card" && !cardRefund && !cardPayment);
               return <tr key={`${row.kind}-${row.id}`} className="clickable-row">
-                <td><Link href={`/transactions/${row.kind}/${row.id}`}>{row.date}</Link></td>
-                <td><Link href={`/transactions/${row.kind}/${row.id}`}>{row.description}</Link></td>
-                <td><Link href={`/transactions/${row.kind}/${row.id}`}><span className={`type-badge type-${row.type}`}>{typeLabel(row.type, row.entryType)}</span></Link></td>
-                <td><Link href={`/transactions/${row.kind}/${row.id}`}>{row.category}</Link></td>
-                <td><Link href={`/transactions/${row.kind}/${row.id}`}>{row.account}</Link></td>
-                <td><Link href={`/transactions/${row.kind}/${row.id}`}>{row.owner}</Link></td>
-                <td className={positive ? "positive amount-cell" : negative ? "negative amount-cell" : "amount-cell"}><Link href={`/transactions/${row.kind}/${row.id}`}>{positive ? "+" : negative ? "−" : "↔ "}{money(row.amount)}</Link></td>
+                <td><Link href={row.href}>{row.date}</Link></td>
+                <td><Link href={row.href}>{row.description}</Link></td>
+                <td><Link href={row.href}><span className={`type-badge type-${row.type}`}>{typeLabel(row.type, row.entryType)}</span></Link></td>
+                <td><Link href={row.href}>{row.category}</Link></td>
+                <td><Link href={row.href}>{row.account}</Link></td>
+                <td><Link href={row.href}>{row.owner}</Link></td>
+                <td className={positive ? "positive amount-cell" : negative ? "negative amount-cell" : "amount-cell"}><Link href={row.href}>{positive ? "+" : negative ? "−" : "↔ "}{money(row.amount)}</Link></td>
               </tr>;
             })}
           </tbody></table></div>
