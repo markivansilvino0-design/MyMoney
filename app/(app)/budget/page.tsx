@@ -6,6 +6,11 @@ import { copyPreviousMonthBudgets, deleteBudget, saveBudget } from "./actions";
 
 type Params = Promise<{ month?: string; success?: string; error?: string }>;
 
+
+function manilaToday() {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+}
+
 function manilaMonth() {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit" }).formatToParts(new Date());
   return `${parts.find((p) => p.type === "year")?.value}-${parts.find((p) => p.type === "month")?.value}`;
@@ -37,12 +42,15 @@ export default async function BudgetPage({ searchParams }: { searchParams: Param
   const month = normalizeMonth(params.month);
   const monthStart = `${month}-01`;
   const end = monthEnd(month);
+  const today = manilaToday();
+  const postedEnd = end < today ? end : today;
   const supabase = await createClient();
 
-  const [{ data: categories }, { data: budgets }, { data: expenses }] = await Promise.all([
+  const [{ data: categories }, { data: budgets }, { data: expenses }, { data: cardExpenses }] = await Promise.all([
     supabase.from("categories").select("id,name").eq("category_type", "expense").eq("is_active", true).order("name"),
     supabase.from("budgets").select("id,category_id,budget_amount").eq("month_start", monthStart),
     supabase.from("transactions").select("category_id,amount").eq("transaction_type", "expense").gte("transaction_date", monthStart).lte("transaction_date", end),
+    supabase.from("credit_card_transactions").select("activity_type,category_id,amount").in("activity_type", ["purchase","refund","fee","interest"]).gte("activity_date", monthStart).lte("activity_date", postedEnd),
   ]);
 
   const categoryRows = categories ?? [];
@@ -51,6 +59,11 @@ export default async function BudgetPage({ searchParams }: { searchParams: Param
   for (const row of expenses ?? []) {
     if (!row.category_id) continue;
     actualMap.set(row.category_id, (actualMap.get(row.category_id) ?? 0) + Number(row.amount));
+  }
+  for (const row of cardExpenses ?? []) {
+    if (!row.category_id) continue;
+    const signed = row.activity_type === "refund" ? -Number(row.amount) : Number(row.amount);
+    actualMap.set(row.category_id, (actualMap.get(row.category_id) ?? 0) + signed);
   }
 
   const rows = categoryRows.map((category) => {
@@ -103,7 +116,7 @@ export default async function BudgetPage({ searchParams }: { searchParams: Param
         </div>
         <div className="budget-health-row">
           <div className="ring-metric" style={{ "--value": `${Math.min(usedPct, 100)}%` } as CSSProperties}><div><strong>{usedPct.toFixed(0)}%</strong><span>used</span></div></div>
-          <div className="budget-health-copy"><strong>{remaining >= 0 ? `${money(remaining)} still available` : `${money(Math.abs(remaining))} over plan`}</strong><span className="muted">Actual spending is pulled directly from your Expense transactions for {monthLabel(month)}.</span></div>
+          <div className="budget-health-copy"><strong>{remaining >= 0 ? `${money(remaining)} still available` : `${money(Math.abs(remaining))} over plan`}</strong><span className="muted">Actual spending includes cash-account expenses and posted credit-card charges for {monthLabel(month)}.</span></div>
         </div>
       </section>
 
