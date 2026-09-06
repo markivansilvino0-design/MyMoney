@@ -47,8 +47,8 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
   const allGoalRows = goals ?? [];
   const activeGoalRows = allGoalRows.filter((goal) => goal.status === "active");
 
-  let txQuery = supabase.from("transactions").select("id,transaction_date,transaction_type,account_id,to_account_id,category_id,owner_id,amount,description,need_want,fixed_variable,created_at").order("transaction_date", { ascending: false }).order("created_at", { ascending: false }).limit(300);
-  let svQuery = supabase.from("savings_contributions").select("id,contribution_date,from_account_id,to_account_id,savings_goal_id,entry_type,saving_mode,amount,description,notes,created_at").order("contribution_date", { ascending: false }).order("created_at", { ascending: false }).limit(300);
+  let txQuery = supabase.from("transactions").select("id,transaction_date,transaction_type,account_id,to_account_id,category_id,owner_id,amount,description,need_want,fixed_variable,created_at").order("transaction_date", { ascending: false }).order("created_at", { ascending: false }).limit(120);
+  let svQuery = supabase.from("savings_contributions").select("id,contribution_date,from_account_id,to_account_id,savings_goal_id,entry_type,saving_mode,amount,description,notes,created_at").order("contribution_date", { ascending: false }).order("created_at", { ascending: false }).limit(120);
 
   if (params.from) { txQuery = txQuery.gte("transaction_date", params.from); svQuery = svQuery.gte("contribution_date", params.from); }
   if (params.to) { txQuery = txQuery.lte("transaction_date", params.to); svQuery = svQuery.lte("contribution_date", params.to); }

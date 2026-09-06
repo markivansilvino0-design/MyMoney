@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { savingsGoalImpact } from "@/lib/finance";
@@ -29,7 +28,11 @@ async function getUser() {
   return { supabase, userId };
 }
 
-async function owns(supabase: Awaited<ReturnType<typeof createClient>>, table: OwnershipTable, id: string | null) {
+async function owns(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  table: OwnershipTable,
+  id: string | null,
+) {
   if (!id) return false;
   const { data } = await supabase.from(table).select("id").eq("id", id).maybeSingle();
   return Boolean(data?.id);
@@ -53,12 +56,16 @@ async function validateSavingsGoalBalance(
 ) {
   const goalIds = Array.from(new Set([goalId, oldEntry?.savings_goal_id].filter(Boolean) as string[]));
   const { data: goals } = await supabase.from("savings_goals").select("id,current_amount").in("id", goalIds);
-  const currentMap = new Map<string, number>((goals ?? []).map((goal) => [goal.id, Number(goal.current_amount)] as [string, number]));
+  const currentMap = new Map<string, number>(
+    (goals ?? []).map((goal) => [goal.id, Number(goal.current_amount)] as [string, number]),
+  );
   if (!currentMap.has(goalId)) return "Choose a valid savings goal.";
 
   if (!oldEntry) {
     const resulting = (currentMap.get(goalId) ?? 0) + savingsGoalImpact(newEntryType, newAmount);
-    return resulting < -0.00001 ? "A withdrawal cannot be greater than the amount currently saved in this goal." : null;
+    return resulting < -0.00001
+      ? "A withdrawal cannot be greater than the amount currently saved in this goal."
+      : null;
   }
 
   const oldImpact = savingsGoalImpact(oldEntry.entry_type, oldEntry.amount);
@@ -70,18 +77,10 @@ async function validateSavingsGoalBalance(
   }
 
   const newGoalResult = (currentMap.get(goalId) ?? 0) + newImpact;
-  if (newGoalResult < -0.00001) return "A withdrawal cannot be greater than the amount currently saved in the selected goal.";
+  if (newGoalResult < -0.00001) {
+    return "A withdrawal cannot be greater than the amount currently saved in the selected goal.";
+  }
   return null;
-}
-
-function revalidateMoneyPages(goalId?: string | null, accountId?: string | null, toAccountId?: string | null) {
-  revalidatePath("/transactions");
-  revalidatePath("/dashboard");
-  revalidatePath("/accounts");
-  revalidatePath("/savings");
-  if (goalId) revalidatePath(`/savings/${goalId}`);
-  if (accountId) revalidatePath(`/accounts/${accountId}`);
-  if (toAccountId) revalidatePath(`/accounts/${toAccountId}`);
 }
 
 export async function createMoneyEntry(formData: FormData) {
@@ -108,13 +107,19 @@ export async function createMoneyEntry(formData: FormData) {
     const savingMode = text(formData, "saving_mode") || "earmark";
     if (!["deposit", "withdrawal"].includes(entryType)) fail("Choose Deposit or Withdrawal for savings activity.");
     if (!["earmark", "transfer"].includes(savingMode)) fail("Choose a valid savings mode.");
-    if (!(await owns(supabase, "accounts", accountId))) fail("Choose a valid account.");
-    if (!(await owns(supabase, "savings_goals", savingsGoalId))) fail("Choose a valid savings goal.");
-
-    if (savingMode === "transfer") {
-      if (!(await owns(supabase, "accounts", toAccountId))) fail("Choose a valid destination account.");
-      if (accountId === toAccountId) fail("The source and destination accounts must be different.");
+    if (savingMode === "transfer" && accountId === toAccountId) {
+      fail("The source and destination accounts must be different.");
     }
+
+    const [accountOwned, goalOwned, destinationOwned] = await Promise.all([
+      owns(supabase, "accounts", accountId),
+      owns(supabase, "savings_goals", savingsGoalId),
+      savingMode === "transfer" ? owns(supabase, "accounts", toAccountId) : Promise.resolve(true),
+    ]);
+
+    if (!accountOwned) fail("Choose a valid account.");
+    if (!goalOwned) fail("Choose a valid savings goal.");
+    if (!destinationOwned) fail("Choose a valid destination account.");
 
     const balanceError = await validateSavingsGoalBalance(supabase, savingsGoalId!, entryType, amount);
     if (balanceError) fail(balanceError);
@@ -132,17 +137,23 @@ export async function createMoneyEntry(formData: FormData) {
       notes,
     });
     if (error) fail(error.message);
-    revalidateMoneyPages(savingsGoalId, accountId, savingMode === "transfer" ? toAccountId : null);
   } else {
-    if (!(await owns(supabase, "accounts", accountId))) fail("Choose a valid account.");
-
-    if (type === "transfer") {
-      if (!(await owns(supabase, "accounts", toAccountId))) fail("Choose a valid destination account.");
-      if (accountId === toAccountId) fail("The source and destination accounts must be different.");
+    if (type === "transfer" && accountId === toAccountId) {
+      fail("The source and destination accounts must be different.");
     }
 
-    if ((type === "income" || type === "expense") && !(await owns(supabase, "categories", categoryId))) fail("Choose a valid category.");
-    if ((type === "income" || type === "expense") && ownerId && !(await owns(supabase, "owners", ownerId))) fail("Choose a valid owner.");
+    const needsCategory = type === "income" || type === "expense";
+    const [accountOwned, destinationOwned, categoryOwned, ownerOwned] = await Promise.all([
+      owns(supabase, "accounts", accountId),
+      type === "transfer" ? owns(supabase, "accounts", toAccountId) : Promise.resolve(true),
+      needsCategory ? owns(supabase, "categories", categoryId) : Promise.resolve(true),
+      needsCategory && ownerId ? owns(supabase, "owners", ownerId) : Promise.resolve(true),
+    ]);
+
+    if (!accountOwned) fail("Choose a valid account.");
+    if (!destinationOwned) fail("Choose a valid destination account.");
+    if (!categoryOwned) fail("Choose a valid category.");
+    if (!ownerOwned) fail("Choose a valid owner.");
 
     const { error } = await supabase.from("transactions").insert({
       user_id: userId,
@@ -150,18 +161,20 @@ export async function createMoneyEntry(formData: FormData) {
       transaction_type: type,
       account_id: accountId,
       to_account_id: type === "transfer" ? toAccountId : null,
-      category_id: type === "income" || type === "expense" ? categoryId : null,
-      owner_id: type === "income" || type === "expense" ? ownerId : null,
+      category_id: needsCategory ? categoryId : null,
+      owner_id: needsCategory ? ownerId : null,
       amount,
       description,
       need_want: type === "expense" && ["need", "want"].includes(needWant ?? "") ? needWant : null,
-      fixed_variable: type === "expense" && ["fixed", "variable"].includes(fixedVariable ?? "") ? fixedVariable : null,
+      fixed_variable:
+        type === "expense" && ["fixed", "variable"].includes(fixedVariable ?? "") ? fixedVariable : null,
       notes,
     });
     if (error) fail(error.message);
-    revalidateMoneyPages(null, accountId, type === "transfer" ? toAccountId : null);
   }
 
+  // These routes read user-specific Supabase data dynamically. Redirecting is enough
+  // to fetch the fresh transaction list, and other pages fetch fresh data when opened.
   redirect("/transactions?success=Transaction%20saved.");
 }
 
@@ -179,7 +192,6 @@ export async function updateMoneyEntry(formData: FormData) {
   if (!id) fail("Missing transaction ID.", "/transactions");
   if (!validDate(date)) fail("Choose a valid transaction date.", backTo);
   if (!amount) fail("Amount must be greater than zero.", backTo);
-  if (!(await owns(supabase, "accounts", accountId))) fail("Choose a valid account.", backTo);
 
   if (kind === "sv") {
     const savingsGoalId = optionalText(formData, "savings_goal_id");
@@ -187,36 +199,48 @@ export async function updateMoneyEntry(formData: FormData) {
     const entryType = text(formData, "savings_entry_type") || "deposit";
     const savingMode = text(formData, "saving_mode") || "earmark";
 
-    if (!(await owns(supabase, "savings_goals", savingsGoalId))) fail("Choose a valid savings goal.", backTo);
     if (!["deposit", "withdrawal"].includes(entryType)) fail("Choose Deposit or Withdrawal.", backTo);
     if (!["earmark", "transfer"].includes(savingMode)) fail("Choose a valid savings mode.", backTo);
-    if (savingMode === "transfer") {
-      if (!(await owns(supabase, "accounts", toAccountId))) fail("Choose a valid destination account.", backTo);
-      if (accountId === toAccountId) fail("The source and destination accounts must be different.", backTo);
+    if (savingMode === "transfer" && accountId === toAccountId) {
+      fail("The source and destination accounts must be different.", backTo);
     }
 
-    const { data: oldEntry } = await supabase.from("savings_contributions").select("savings_goal_id,entry_type,amount,from_account_id,to_account_id").eq("id", id).maybeSingle();
+    const [accountOwned, goalOwned, destinationOwned, oldResult] = await Promise.all([
+      owns(supabase, "accounts", accountId),
+      owns(supabase, "savings_goals", savingsGoalId),
+      savingMode === "transfer" ? owns(supabase, "accounts", toAccountId) : Promise.resolve(true),
+      supabase
+        .from("savings_contributions")
+        .select("savings_goal_id,entry_type,amount,from_account_id,to_account_id")
+        .eq("id", id)
+        .maybeSingle(),
+    ]);
+
+    if (!accountOwned) fail("Choose a valid account.", backTo);
+    if (!goalOwned) fail("Choose a valid savings goal.", backTo);
+    if (!destinationOwned) fail("Choose a valid destination account.", backTo);
+
+    const oldEntry = oldResult.data;
     if (!oldEntry) fail("Savings entry not found.", "/transactions");
     const balanceError = await validateSavingsGoalBalance(supabase, savingsGoalId!, entryType, amount, oldEntry);
     if (balanceError) fail(balanceError, backTo);
 
-    const { error } = await supabase.from("savings_contributions").update({
-      savings_goal_id: savingsGoalId,
-      from_account_id: accountId,
-      to_account_id: savingMode === "transfer" ? toAccountId : null,
-      entry_type: entryType,
-      saving_mode: savingMode,
-      amount,
-      contribution_date: date,
-      description,
-      notes,
-      updated_at: new Date().toISOString(),
-    }).eq("id", id);
+    const { error } = await supabase
+      .from("savings_contributions")
+      .update({
+        savings_goal_id: savingsGoalId,
+        from_account_id: accountId,
+        to_account_id: savingMode === "transfer" ? toAccountId : null,
+        entry_type: entryType,
+        saving_mode: savingMode,
+        amount,
+        contribution_date: date,
+        description,
+        notes,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id);
     if (error) fail(error.message, backTo);
-    revalidateMoneyPages(savingsGoalId, accountId, toAccountId);
-    if (oldEntry.savings_goal_id !== savingsGoalId) revalidatePath(`/savings/${oldEntry.savings_goal_id}`);
-    if (oldEntry.from_account_id) revalidatePath(`/accounts/${oldEntry.from_account_id}`);
-    if (oldEntry.to_account_id) revalidatePath(`/accounts/${oldEntry.to_account_id}`);
   } else if (kind === "tx") {
     const type = text(formData, "transaction_type") as Exclude<EntryType, "savings">;
     const toAccountId = optionalText(formData, "to_account_id");
@@ -226,37 +250,46 @@ export async function updateMoneyEntry(formData: FormData) {
     const fixedVariable = optionalText(formData, "fixed_variable");
 
     if (!["income", "expense", "transfer"].includes(type)) fail("Choose a valid transaction type.", backTo);
-    if (type === "transfer") {
-      if (!(await owns(supabase, "accounts", toAccountId))) fail("Choose a valid destination account.", backTo);
-      if (accountId === toAccountId) fail("The source and destination accounts must be different.", backTo);
+    if (type === "transfer" && accountId === toAccountId) {
+      fail("The source and destination accounts must be different.", backTo);
     }
-    if ((type === "income" || type === "expense") && !(await owns(supabase, "categories", categoryId))) fail("Choose a valid category.", backTo);
-    if ((type === "income" || type === "expense") && ownerId && !(await owns(supabase, "owners", ownerId))) fail("Choose a valid owner.", backTo);
 
-    const { data: oldEntry } = await supabase.from("transactions").select("account_id,to_account_id").eq("id", id).maybeSingle();
-    const { error } = await supabase.from("transactions").update({
-      transaction_date: date,
-      transaction_type: type,
-      account_id: accountId,
-      to_account_id: type === "transfer" ? toAccountId : null,
-      category_id: type === "income" || type === "expense" ? categoryId : null,
-      owner_id: type === "income" || type === "expense" ? ownerId : null,
-      amount,
-      description,
-      need_want: type === "expense" && ["need", "want"].includes(needWant ?? "") ? needWant : null,
-      fixed_variable: type === "expense" && ["fixed", "variable"].includes(fixedVariable ?? "") ? fixedVariable : null,
-      notes,
-      updated_at: new Date().toISOString(),
-    }).eq("id", id);
+    const needsCategory = type === "income" || type === "expense";
+    const [accountOwned, destinationOwned, categoryOwned, ownerOwned] = await Promise.all([
+      owns(supabase, "accounts", accountId),
+      type === "transfer" ? owns(supabase, "accounts", toAccountId) : Promise.resolve(true),
+      needsCategory ? owns(supabase, "categories", categoryId) : Promise.resolve(true),
+      needsCategory && ownerId ? owns(supabase, "owners", ownerId) : Promise.resolve(true),
+    ]);
+
+    if (!accountOwned) fail("Choose a valid account.", backTo);
+    if (!destinationOwned) fail("Choose a valid destination account.", backTo);
+    if (!categoryOwned) fail("Choose a valid category.", backTo);
+    if (!ownerOwned) fail("Choose a valid owner.", backTo);
+
+    const { error } = await supabase
+      .from("transactions")
+      .update({
+        transaction_date: date,
+        transaction_type: type,
+        account_id: accountId,
+        to_account_id: type === "transfer" ? toAccountId : null,
+        category_id: needsCategory ? categoryId : null,
+        owner_id: needsCategory ? ownerId : null,
+        amount,
+        description,
+        need_want: type === "expense" && ["need", "want"].includes(needWant ?? "") ? needWant : null,
+        fixed_variable:
+          type === "expense" && ["fixed", "variable"].includes(fixedVariable ?? "") ? fixedVariable : null,
+        notes,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id);
     if (error) fail(error.message, backTo);
-    revalidateMoneyPages(null, accountId, type === "transfer" ? toAccountId : null);
-    if (oldEntry?.account_id) revalidatePath(`/accounts/${oldEntry.account_id}`);
-    if (oldEntry?.to_account_id) revalidatePath(`/accounts/${oldEntry.to_account_id}`);
   } else {
     fail("Unknown transaction type.", "/transactions");
   }
 
-  revalidatePath(backTo);
   redirect(`${backTo}?success=Changes%20saved.`);
 }
 
@@ -267,15 +300,11 @@ export async function deleteMoneyEntry(formData: FormData) {
   if (!id) fail("Missing transaction ID.");
 
   if (kind === "sv") {
-    const { data: row } = await supabase.from("savings_contributions").select("savings_goal_id,from_account_id,to_account_id").eq("id", id).maybeSingle();
     const { error } = await supabase.from("savings_contributions").delete().eq("id", id);
     if (error) fail(error.message, `/transactions/${kind}/${id}`);
-    revalidateMoneyPages(row?.savings_goal_id, row?.from_account_id, row?.to_account_id);
   } else if (kind === "tx") {
-    const { data: row } = await supabase.from("transactions").select("account_id,to_account_id").eq("id", id).maybeSingle();
     const { error } = await supabase.from("transactions").delete().eq("id", id);
     if (error) fail(error.message, `/transactions/${kind}/${id}`);
-    revalidateMoneyPages(null, row?.account_id, row?.to_account_id);
   } else {
     fail("Unknown transaction type.");
   }
