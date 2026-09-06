@@ -17,6 +17,12 @@ export type SavingsActivityRow = {
   amount: number | string;
 };
 
+export type CreditCardPaymentRow = {
+  activity_type: string;
+  account_id: string | null;
+  amount: number | string;
+};
+
 export function savingsGoalImpact(entryType: string | null | undefined, amount: number | string) {
   const value = Number(amount);
   return entryType === "withdrawal" ? -value : value;
@@ -26,6 +32,7 @@ export function accountBalance(
   account: AccountBalanceRow,
   transactions: MoneyTransactionRow[],
   savingsEntries: SavingsActivityRow[],
+  cardActivities: CreditCardPaymentRow[] = [],
 ) {
   let balance = Number(account.opening_balance ?? 0);
 
@@ -42,6 +49,12 @@ export function accountBalance(
     const amount = Number(entry.amount);
     if (entry.from_account_id === account.id) balance -= amount;
     if (entry.to_account_id === account.id) balance += amount;
+  }
+
+  for (const activity of cardActivities) {
+    if (activity.activity_type === "payment" && activity.account_id === account.id) {
+      balance -= Number(activity.amount);
+    }
   }
 
   return balance;
