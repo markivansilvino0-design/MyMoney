@@ -115,7 +115,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
 
   return (
     <main className="main">
-      <div className="page-heading"><div><h2>Transactions</h2><p>Record income, expenses, transfers and savings in one place.</p></div></div>
+      <div className="page-heading"><div><div className="eyebrow">Activity</div><h2>Transactions</h2><p>Record income, expenses, transfers and savings in one place.</p></div></div>
 
       {params.error && <div className="notice error page-notice">{params.error}</div>}
       {params.success && <div className="notice success page-notice">{params.success}</div>}
