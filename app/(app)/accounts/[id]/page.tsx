@@ -17,18 +17,22 @@ export default async function AccountDetailPage({ params, searchParams }: {
   const notices = await searchParams;
   const supabase = await createClient();
 
-  const [{ data: account }, { data: transactions }, { data: savings }, { data: goals }] = await Promise.all([
+  const [{ data: account }, { data: transactions }, { data: savings }, { data: goals }, { data: cardPayments }, { data: cards }] = await Promise.all([
     supabase.from("accounts").select("id,name,account_type,opening_balance,is_active,created_at").eq("id", id).maybeSingle(),
     supabase.from("transactions").select("id,transaction_date,transaction_type,account_id,to_account_id,amount,description,created_at").or(`account_id.eq.${id},to_account_id.eq.${id}`).order("transaction_date", { ascending: false }).limit(200),
     supabase.from("savings_contributions").select("id,contribution_date,from_account_id,to_account_id,saving_mode,entry_type,amount,description,notes,savings_goal_id,created_at").or(`from_account_id.eq.${id},to_account_id.eq.${id}`).order("contribution_date", { ascending: false }).limit(200),
     supabase.from("savings_goals").select("id,name"),
+    supabase.from("credit_card_transactions").select("id,credit_card_id,activity_date,activity_type,account_id,amount,description,created_at").eq("activity_type", "payment").eq("account_id", id).order("activity_date", { ascending: false }).limit(200),
+    supabase.from("credit_cards").select("id,name"),
   ]);
 
   if (!account) notFound();
   const txRows = transactions ?? [];
   const savingsRows = savings ?? [];
   const goalMap = new Map((goals ?? []).map((goal) => [goal.id, goal.name]));
-  const balance = accountBalance(account, txRows, savingsRows);
+  const cardPaymentRows = cardPayments ?? [];
+  const cardMap = new Map((cards ?? []).map((card) => [card.id, card.name]));
+  const balance = accountBalance(account, txRows, savingsRows, cardPaymentRows);
 
   let inflow = 0;
   let outflow = 0;
@@ -61,6 +65,12 @@ export default async function AccountDetailPage({ params, searchParams }: {
       if (delta > 0) inflow += delta;
       if (delta < 0) outflow += Math.abs(delta);
       return { key: `sv-${row.id}`, href: `/transactions/sv/${row.id}`, date: row.contribution_date, createdAt: row.created_at, description: row.description || `Savings transfer · ${goalName}`, type: "savings transfer", delta, amount };
+    }),
+    ...cardPaymentRows.map((row) => {
+      const amount = Number(row.amount);
+      outflow += amount;
+      const cardName = cardMap.get(row.credit_card_id) ?? "Credit card";
+      return { key: `cc-${row.id}`, href: `/credit-cards/${row.credit_card_id}`, date: row.activity_date, createdAt: row.created_at, description: row.description || `Payment to ${cardName}`, type: "credit card payment", delta: -amount, amount };
     }),
   ].sort((a, b) => `${b.date} ${b.createdAt}`.localeCompare(`${a.date} ${a.createdAt}`));
 

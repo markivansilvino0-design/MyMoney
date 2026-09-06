@@ -8,17 +8,18 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
   const notices = await searchParams;
   const supabase = await createClient();
 
-  const [{ data: accounts }, { data: transactions }, { data: savings }] = await Promise.all([
+  const [{ data: accounts }, { data: transactions }, { data: savings }, { data: cardPayments }] = await Promise.all([
     supabase.from("accounts").select("id,name,account_type,opening_balance,is_active").order("is_active", { ascending: false }).order("name"),
     supabase.from("transactions").select("transaction_type,account_id,to_account_id,amount"),
     supabase.from("savings_contributions").select("from_account_id,to_account_id,saving_mode,amount"),
+    supabase.from("credit_card_transactions").select("activity_type,account_id,amount").eq("activity_type", "payment"),
   ]);
 
   const transactionRows = transactions ?? [];
   const savingsRows = savings ?? [];
   const rows = (accounts ?? []).map((account) => ({
     ...account,
-    balance: accountBalance(account, transactionRows, savingsRows),
+    balance: accountBalance(account, transactionRows, savingsRows, cardPayments ?? []),
   }));
   const totalBalance = rows.reduce((sum, row) => sum + row.balance, 0);
   const activeCount = rows.filter((row) => row.is_active).length;
