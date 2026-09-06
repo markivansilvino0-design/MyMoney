@@ -76,18 +76,24 @@ export function TransactionForm({
     <form action={action} className="transaction-form">
       {initial && <><input type="hidden" name="id" value={initial.id} /><input type="hidden" name="kind" value={initial.kind} /></>}
 
-      <div className="form-grid">
-        <div className="field">
-          <label htmlFor="transaction_type">Type</label>
-          <select id="transaction_type" name="transaction_type" value={type} onChange={(event) => setType(event.target.value as EntryType)} disabled={initial?.kind === "sv"}>
-            <option value="income">Income</option>
-            <option value="expense">Expense</option>
-            <option value="transfer">Transfer</option>
-            {(!initial || initial.kind === "sv") && <option value="savings">Savings</option>}
-          </select>
-          {initial?.kind === "sv" && <input type="hidden" name="transaction_type" value="savings" />}
+      <div className="field type-field">
+        <label>Transaction type</label>
+        <div className="type-tabs" role="group" aria-label="Transaction type">
+          {([
+            ["income", "Income", "+"],
+            ["expense", "Expense", "−"],
+            ["transfer", "Transfer", "↔"],
+            ["savings", "Savings", "◎"],
+          ] as const).filter(([value]) => value !== "savings" || !initial || initial.kind === "sv").map(([value, label, icon]) => (
+            <button key={value} type="button" className={`type-tab ${type === value ? "active" : ""} type-tab-${value}`} onClick={() => setType(value)} disabled={initial?.kind === "sv"}>
+              <span>{icon}</span>{label}
+            </button>
+          ))}
         </div>
+        <input type="hidden" name="transaction_type" value={type} />
+      </div>
 
+      <div className="form-grid">
         <div className="field">
           <label htmlFor="transaction_date">Date</label>
           <input id="transaction_date" name="transaction_date" type="date" defaultValue={initial?.transaction_date ?? today} required />
