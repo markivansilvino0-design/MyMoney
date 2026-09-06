@@ -7,7 +7,8 @@ function currentMonthParts() {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
   const year = parts.find((part) => part.type === "year")?.value ?? "";
   const month = parts.find((part) => part.type === "month")?.value ?? "";
-  return { monthStart: `${year}-${month}-01`, monthLabel: new Intl.DateTimeFormat("en-PH", { timeZone: "Asia/Manila", month: "long", year: "numeric" }).format(new Date()) };
+  const day = parts.find((part) => part.type === "day")?.value ?? "01";
+  return { monthStart: `${year}-${month}-01`, today: `${year}-${month}-${day}`, monthLabel: new Intl.DateTimeFormat("en-PH", { timeZone: "Asia/Manila", month: "long", year: "numeric" }).format(new Date()) };
 }
 
 function pctLabel(value: number) {
@@ -18,7 +19,7 @@ function pctLabel(value: number) {
 
 export default async function DashboardPage() {
   const supabase = await createClient();
-  const { monthStart, monthLabel } = currentMonthParts();
+  const { monthStart, today, monthLabel } = currentMonthParts();
 
   const [
     { data: monthTransactions },
@@ -26,25 +27,37 @@ export default async function DashboardPage() {
     { data: goals },
     { data: monthContributions },
     { data: recentContributions },
+    { data: monthCardActivity },
+    { data: recentCardActivity },
   ] = await Promise.all([
     supabase.from("transactions").select("transaction_type,amount").gte("transaction_date", monthStart),
     supabase.from("transactions").select("id,transaction_date,transaction_type,amount,description,created_at").order("transaction_date", { ascending: false }).order("created_at", { ascending: false }).limit(8),
     supabase.from("savings_goals").select("id,name,target_amount,current_amount").eq("status", "active").order("created_at", { ascending: true }).limit(4),
     supabase.from("savings_contributions").select("amount,entry_type,contribution_date").gte("contribution_date", monthStart),
     supabase.from("savings_contributions").select("id,contribution_date,amount,entry_type,description,notes,created_at").order("contribution_date", { ascending: false }).order("created_at", { ascending: false }).limit(8),
+    supabase.from("credit_card_transactions").select("activity_type,amount").gte("activity_date", monthStart).lte("activity_date", today),
+    supabase.from("credit_card_transactions").select("id,credit_card_id,activity_date,activity_type,amount,description,created_at").lte("activity_date", today).order("activity_date", { ascending: false }).order("created_at", { ascending: false }).limit(8),
   ]);
 
   const monthRows = monthTransactions ?? [];
   const income = monthRows.filter((transaction) => transaction.transaction_type === "income").reduce((sum, transaction) => sum + Number(transaction.amount), 0);
-  const expenses = monthRows.filter((transaction) => transaction.transaction_type === "expense").reduce((sum, transaction) => sum + Number(transaction.amount), 0);
+  const cashExpenses = monthRows.filter((transaction) => transaction.transaction_type === "expense").reduce((sum, transaction) => sum + Number(transaction.amount), 0);
+  const cardExpenses = (monthCardActivity ?? []).reduce((sum, row) => {
+    const amount = Number(row.amount);
+    if (["purchase", "fee", "interest"].includes(row.activity_type)) return sum + amount;
+    if (row.activity_type === "refund") return sum - amount;
+    return sum;
+  }, 0);
+  const expenses = cashExpenses + cardExpenses;
   const savings = (monthContributions ?? []).reduce((sum, entry) => sum + savingsGoalImpact(entry.entry_type, entry.amount), 0);
   const available = income - expenses - savings;
   const savingsRate = income > 0 ? (savings / income) * 100 : 0;
   const expenseRate = income > 0 ? (expenses / income) * 100 : 0;
 
   const recent = [
-    ...(recentTransactions ?? []).map((transaction) => ({ kind: "tx", id: transaction.id, date: transaction.transaction_date, type: transaction.transaction_type, entryType: "", amount: Number(transaction.amount), description: transaction.description || (transaction.transaction_type === "transfer" ? "Account transfer" : "—"), created_at: transaction.created_at })),
-    ...(recentContributions ?? []).map((entry) => ({ kind: "sv", id: entry.id, date: entry.contribution_date, type: "savings", entryType: entry.entry_type ?? "deposit", amount: Number(entry.amount), description: entry.description || entry.notes || (entry.entry_type === "withdrawal" ? "Savings withdrawal" : "Savings deposit"), created_at: entry.created_at })),
+    ...(recentTransactions ?? []).map((transaction) => ({ kind: "tx", id: transaction.id, cardId: "", date: transaction.transaction_date, type: transaction.transaction_type, entryType: "", amount: Number(transaction.amount), description: transaction.description || (transaction.transaction_type === "transfer" ? "Account transfer" : "—"), created_at: transaction.created_at })),
+    ...(recentContributions ?? []).map((entry) => ({ kind: "sv", id: entry.id, cardId: "", date: entry.contribution_date, type: "savings", entryType: entry.entry_type ?? "deposit", amount: Number(entry.amount), description: entry.description || entry.notes || (entry.entry_type === "withdrawal" ? "Savings withdrawal" : "Savings deposit"), created_at: entry.created_at })),
+    ...(recentCardActivity ?? []).map((entry) => ({ kind: "cc", id: entry.id, cardId: entry.credit_card_id, date: entry.activity_date, type: "credit_card", entryType: entry.activity_type, amount: Number(entry.amount), description: entry.description || `Credit card ${entry.activity_type}`, created_at: entry.created_at })),
   ].sort((a, b) => `${b.date} ${b.created_at}`.localeCompare(`${a.date} ${a.created_at}`)).slice(0, 8);
 
   return (
@@ -88,10 +101,13 @@ export default async function DashboardPage() {
         {recent.length === 0 ? <div className="empty">Your recent transactions will appear here.</div> : (
           <div className="table-wrap"><table className="modern-table"><thead><tr><th>Date</th><th>Description</th><th>Type</th><th>Amount</th></tr></thead><tbody>{recent.map((entry) => {
             const savingsWithdrawal = entry.type === "savings" && entry.entryType === "withdrawal";
-            const positive = entry.type === "income" || savingsWithdrawal;
-            const negative = entry.type === "expense" || (entry.type === "savings" && !savingsWithdrawal);
-            const label = entry.type === "savings" ? (savingsWithdrawal ? "savings withdrawal" : "savings deposit") : entry.type;
-            return <tr key={`${entry.kind}-${entry.id}`}><td><Link href={`/transactions/${entry.kind}/${entry.id}`}>{entry.date}</Link></td><td><Link href={`/transactions/${entry.kind}/${entry.id}`}><strong>{entry.description}</strong></Link></td><td><Link href={`/transactions/${entry.kind}/${entry.id}`}><span className={`type-badge type-${entry.type}`}>{label}</span></Link></td><td className={positive ? "positive amount-cell" : negative ? "negative amount-cell" : "amount-cell"}><Link href={`/transactions/${entry.kind}/${entry.id}`}>{positive ? "+" : negative ? "−" : "↔ "}{money(entry.amount)}</Link></td></tr>;
+            const cardRefund = entry.type === "credit_card" && entry.entryType === "refund";
+            const cardPayment = entry.type === "credit_card" && entry.entryType === "payment";
+            const positive = entry.type === "income" || savingsWithdrawal || cardRefund;
+            const negative = entry.type === "expense" || (entry.type === "savings" && !savingsWithdrawal) || (entry.type === "credit_card" && !cardRefund && !cardPayment);
+            const label = entry.type === "savings" ? (savingsWithdrawal ? "savings withdrawal" : "savings deposit") : entry.type === "credit_card" ? `card ${entry.entryType}` : entry.type;
+            const href = entry.kind === "cc" ? `/credit-cards/${entry.cardId}` : `/transactions/${entry.kind}/${entry.id}`;
+            return <tr key={`${entry.kind}-${entry.id}`}><td><Link href={href}>{entry.date}</Link></td><td><Link href={href}><strong>{entry.description}</strong></Link></td><td><Link href={href}><span className={`type-badge type-${entry.type}`}>{label}</span></Link></td><td className={positive ? "positive amount-cell" : negative ? "negative amount-cell" : "amount-cell"}><Link href={href}>{positive ? "+" : negative ? "−" : "↔ "}{money(entry.amount)}</Link></td></tr>;
           })}</tbody></table></div>
         )}
       </section>
