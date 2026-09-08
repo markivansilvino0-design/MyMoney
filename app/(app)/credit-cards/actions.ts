@@ -271,6 +271,51 @@ export async function createInstallmentPlan(formData: FormData) {
   redirect(`${back}?success=Installment%20schedule%20created.`);
 }
 
+
+export async function updateInstallmentClassification(formData: FormData) {
+  const { supabase } = await session();
+  const cardId = text(formData, "credit_card_id");
+  const installmentId = text(formData, "installment_id");
+  const back = `/credit-cards/${cardId}`;
+  const categoryId = optionalText(formData, "category_id");
+  const ownerId = optionalText(formData, "owner_id");
+  const needWant = optionalText(formData, "need_want");
+  const fixedVariable = optionalText(formData, "fixed_variable");
+
+  if (!(await owns(supabase, "credit_cards", cardId))) fail("Card not found.", "/credit-cards");
+  if (!(await owns(supabase, "credit_card_installments", installmentId))) fail("Installment plan not found.", back);
+
+  const [categoryOwned, ownerOwned] = await Promise.all([
+    owns(supabase, "categories", categoryId),
+    ownerId ? owns(supabase, "owners", ownerId) : Promise.resolve(true),
+  ]);
+  if (!categoryOwned) fail("Choose a valid expense category.", back);
+  if (!ownerOwned) fail("Choose a valid owner.", back);
+
+  const classification = {
+    category_id: categoryId,
+    owner_id: ownerId,
+    need_want: ["need", "want"].includes(needWant ?? "") ? needWant : null,
+    fixed_variable: ["fixed", "variable"].includes(fixedVariable ?? "") ? fixedVariable : null,
+  };
+
+  const { error: planError } = await supabase
+    .from("credit_card_installments")
+    .update({ ...classification, updated_at: new Date().toISOString() })
+    .eq("id", installmentId)
+    .eq("credit_card_id", cardId);
+  if (planError) fail(planError.message, back);
+
+  const { error: scheduleError } = await supabase
+    .from("credit_card_transactions")
+    .update(classification)
+    .eq("installment_id", installmentId)
+    .eq("credit_card_id", cardId);
+  if (scheduleError) fail(scheduleError.message, back);
+
+  redirect(`${back}?success=Installment%20classification%20updated.`);
+}
+
 export async function cancelFutureInstallments(formData: FormData) {
   const { supabase } = await session();
   const cardId = text(formData, "credit_card_id");
