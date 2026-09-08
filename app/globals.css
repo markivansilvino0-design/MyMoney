@@ -491,3 +491,180 @@ tbody tr:hover td { background: #fafcff; }
   .ring-metric { align-self: center; }
   .section-heading { align-items: flex-start; }
 }
+
+/* Phase 6 — Credit Card Center */
+.credit-card-stats { margin-top: 4px; }
+.credit-card-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; }
+.credit-card-tile { display: grid; gap: 12px; padding: 19px; border: 1px solid var(--border); border-radius: 18px; background: linear-gradient(145deg, #ffffff 0%, #f8faff 100%); box-shadow: var(--shadow-sm); transition: transform .14s ease, border-color .15s ease, box-shadow .15s ease; }
+.credit-card-tile:hover { transform: translateY(-2px); border-color: #cbd8f4; box-shadow: var(--shadow-md); }
+.card-subline { margin-top: 3px; font-size: 10.5px; }
+.credit-card-balance { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.credit-card-balance span { color: var(--muted); font-size: 10.5px; font-weight: 750; text-transform: uppercase; letter-spacing: .04em; }
+.credit-card-balance strong { font-size: 23px; letter-spacing: -.35px; }
+.card-meta-row { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 10.5px; }
+.credit-card-main-grid { align-items: start; margin-top: 16px; }
+.statement-panel { overflow: hidden; }
+.statement-picker { display: flex; align-items: center; gap: 7px; }
+.statement-picker input { min-width: 150px; }
+.statement-summary { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 9px; margin-bottom: 13px; }
+.statement-summary > div { display: grid; gap: 5px; padding: 12px; border: 1px solid var(--border); border-radius: 13px; background: #fafbfd; }
+.statement-summary span { color: var(--muted); font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em; font-weight: 760; }
+.statement-summary strong { font-size: 13px; overflow-wrap: anywhere; }
+.statement-splits { margin-bottom: 14px; }
+.statement-table { max-height: 330px; overflow: auto; }
+.card-type-tabs { grid-template-columns: repeat(5, minmax(0,1fr)); }
+.card-entry-form .type-tab { padding-inline: 6px; }
+.cc-activity-badge { display: inline-flex; align-items: center; min-height: 24px; padding: 0 8px; border-radius: 999px; background: #f1f4f8; color: #566579; font-size: 9px; font-weight: 850; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; }
+.cc-purchase, .cc-fee, .cc-interest { background: var(--negative-soft); color: var(--negative); }
+.cc-payment, .cc-refund { background: var(--positive-soft); color: var(--positive); }
+.type-credit_card { background: #f0edff; color: #6949c8; }
+.installment-form { display: grid; gap: 14px; padding-bottom: 17px; border-bottom: 1px solid var(--border); }
+.installment-list { display: grid; gap: 11px; padding-top: 17px; }
+.installment-card { display: grid; gap: 11px; padding: 15px; border: 1px solid var(--border); border-radius: 15px; background: #fff; }
+.installment-metrics { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 8px; }
+.installment-metrics > div { display: grid; gap: 3px; padding: 10px; border: 1px solid var(--border); border-radius: 11px; background: #fafbfd; }
+.installment-metrics span { color: var(--muted); font-size: 9.5px; }
+.installment-metrics strong { font-size: 12px; overflow-wrap: anywhere; }
+.danger-text { color: var(--negative); }
+.upcoming-card-activity { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--border); }
+.upcoming-card-activity h4 { margin: 0 0 10px; font-size: 13px; }
+
+@media (max-width: 1180px) {
+  .credit-card-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .statement-summary { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .installment-metrics { grid-template-columns: repeat(2, minmax(0,1fr)); }
+}
+
+@media (max-width: 760px) {
+  .credit-card-grid { grid-template-columns: 1fr; }
+  .credit-card-main-grid { grid-template-columns: 1fr; }
+  .statement-summary { grid-template-columns: 1fr 1fr; }
+  .card-type-tabs { grid-template-columns: repeat(3, minmax(0,1fr)); }
+  .installment-metrics { grid-template-columns: 1fr 1fr; }
+  .statement-picker { width: 100%; }
+  .statement-picker input { flex: 1; min-width: 0; }
+}
+
+@media (max-width: 480px) {
+  .statement-summary, .installment-metrics { grid-template-columns: 1fr; }
+  .card-type-tabs { grid-template-columns: 1fr 1fr; }
+}
+
+/* Phase 6.1 — Credit card polish */
+.cc-cycle-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 4px 0 14px;
+}
+.cc-cycle-item {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-height: 88px;
+  padding: 13px 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #fff 0%, #fafbfd 100%);
+}
+.cc-cycle-item span {
+  color: var(--muted);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: .055em;
+  text-transform: uppercase;
+}
+.cc-cycle-item strong {
+  display: block;
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.cc-cycle-balance strong { font-size: 18px; }
+
+.cc-installment-card { padding: 18px; gap: 14px; }
+.cc-installment-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+.cc-installment-title { display: block; font-size: 15px; line-height: 1.35; }
+.cc-installment-dates { margin-top: 4px; line-height: 1.45; }
+.cc-installment-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px;
+}
+.cc-installment-summary > div {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  min-height: 74px;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fafbfd;
+}
+.cc-installment-summary span {
+  color: var(--muted);
+  font-size: 9.5px;
+  font-weight: 760;
+}
+.cc-installment-summary strong {
+  display: grid;
+  gap: 2px;
+  font-size: 12.5px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.cc-installment-summary strong > span:first-child { color: inherit; font-size: inherit; font-weight: inherit; }
+.cc-installment-summary strong > span:last-child { color: var(--text); font-size: 13px; font-weight: 850; }
+.cc-installment-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+.cc-installment-meta b { color: var(--text); }
+.cc-installment-edit {
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fbfcff;
+}
+.cc-installment-edit summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 850;
+  list-style-position: inside;
+}
+.cc-installment-edit-form {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+  align-items: end;
+}
+.cc-installment-edit-form .field { min-width: 0; }
+.cc-installment-edit-form button { align-self: end; min-height: 42px; }
+.cc-installment-actions { display: flex; justify-content: flex-end; }
+
+@media (max-width: 1180px) {
+  .cc-cycle-summary,
+  .cc-installment-summary,
+  .cc-installment-edit-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 640px) {
+  .cc-cycle-summary,
+  .cc-installment-summary,
+  .cc-installment-edit-form { grid-template-columns: 1fr; }
+  .cc-installment-head { flex-direction: column; }
+  .cc-installment-head .status-badge { align-self: flex-start; }
+  .cc-installment-actions { justify-content: stretch; }
+  .cc-installment-actions button { width: 100%; text-align: left; }
+}
