@@ -13,7 +13,7 @@ import {
   utilizationRate,
 } from "@/lib/credit-cards";
 import { CreditCardEntryForm } from "@/components/credit-card-entry-form";
-import { cancelFutureInstallments, createInstallmentPlan, deleteCreditCard, deleteCreditCardActivity, updateCreditCard } from "../actions";
+import { cancelFutureInstallments, createInstallmentPlan, deleteCreditCard, deleteCreditCardActivity, updateCreditCard, updateInstallmentClassification } from "../actions";
 
 function manilaToday() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
@@ -79,6 +79,7 @@ export default async function CreditCardDetailPage({ params, searchParams }: {
   const accountMap = new Map((accounts ?? []).map((row) => [row.id, row.name]));
   const categoryMap = new Map((categories ?? []).map((row) => [row.id, row.name]));
   const ownerMap = new Map((owners ?? []).map((row) => [row.id, row.name]));
+  const preferredInstallmentCategory = (categories ?? []).find((row) => row.name.toLowerCase() === "shopping") ?? (categories ?? []).find((row) => row.name.toLowerCase() !== "credit card fees") ?? (categories ?? [])[0];
   const installmentRows = installments ?? [];
   const scheduleByPlan = new Map<string, typeof allActivity>();
   for (const row of allActivity) {
@@ -112,11 +113,11 @@ export default async function CreditCardDetailPage({ params, searchParams }: {
             <div><h3>SOA / Billing cycle</h3><p className="muted">Statement periods run from the day after the prior statement date through this statement date.</p></div>
             <form method="get" className="statement-picker"><label className="sr-only" htmlFor="statement">Statement month</label><input id="statement" type="month" name="statement" defaultValue={statementMonth} /><button className="secondary-btn compact-btn" type="submit">View</button></form>
           </div>
-          <div className="statement-summary">
-            <div><span>Statement</span><strong>{monthLabel(statementMonth)}</strong></div>
-            <div><span>Period</span><strong>{cycle.start} → {cycle.end}</strong></div>
-            <div><span>Due date</span><strong>{cycle.dueDate}</strong></div>
-            <div><span>{cycleClosed ? "Statement balance" : "Current cycle balance"}</span><strong className={statementBalance > 0 ? "negative" : "positive"}>{money(Math.max(statementBalance, 0))}</strong></div>
+          <div className="cc-cycle-summary">
+            <div className="cc-cycle-item"><span>Statement</span><strong>{monthLabel(statementMonth)}</strong></div>
+            <div className="cc-cycle-item"><span>Billing period</span><strong>{cycle.start}<br />→ {cycle.end}</strong></div>
+            <div className="cc-cycle-item"><span>Due date</span><strong>{cycle.dueDate}</strong></div>
+            <div className="cc-cycle-item cc-cycle-balance"><span>{cycleClosed ? "Statement balance" : "Current cycle balance"}</span><strong className={statementBalance > 0 ? "negative" : "positive"}>{money(Math.max(statementBalance, 0))}</strong></div>
           </div>
           <div className="split-metrics statement-splits">
             <div className="split-metric"><span>New charges</span><strong>{money(statementCharges)}</strong><small>Purchases, fees, interest</small></div>
@@ -147,7 +148,7 @@ export default async function CreditCardDetailPage({ params, searchParams }: {
             <div className="field"><label htmlFor="installment_term">Term (months)</label><input id="installment_term" name="term_months" type="number" min="2" max="60" defaultValue="12" required /></div>
             <div className="field"><label htmlFor="purchase_date">Purchase date</label><input id="purchase_date" name="purchase_date" type="date" defaultValue={today} required /></div>
             <div className="field"><label htmlFor="first_charge_date">First billing date</label><input id="first_charge_date" name="first_charge_date" type="date" defaultValue={today} required /></div>
-            <div className="field"><label htmlFor="installment_category">Category</label><select id="installment_category" name="category_id" defaultValue={(categories ?? [])[0]?.id ?? ""} required><option value="" disabled>Select category</option>{(categories ?? []).map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></div>
+            <div className="field"><label htmlFor="installment_category">Category</label><select id="installment_category" name="category_id" defaultValue={preferredInstallmentCategory?.id ?? ""} required><option value="" disabled>Select category</option>{(categories ?? []).map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></div>
             <div className="field"><label htmlFor="installment_owner">Owner / Charge to</label><select id="installment_owner" name="owner_id" defaultValue={(owners ?? []).find((row) => row.is_default)?.id ?? (owners ?? [])[0]?.id ?? ""}><option value="">No owner</option>{(owners ?? []).map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></div>
             <div className="field"><label htmlFor="installment_need">Need or Want</label><select id="installment_need" name="need_want" defaultValue="need"><option value="need">Need</option><option value="want">Want</option></select></div>
             <div className="field"><label htmlFor="installment_fixed">Expense type</label><select id="installment_fixed" name="fixed_variable" defaultValue="fixed"><option value="fixed">Fixed</option><option value="variable">Variable</option></select></div>
@@ -162,12 +163,36 @@ export default async function CreditCardDetailPage({ params, searchParams }: {
           const upcoming = schedule.find((row) => row.activity_date > today);
           const scheduledTotal = schedule.reduce((sum, row) => sum + Number(row.amount), 0);
           const displayStatus = plan.status === "active" && postedCount >= plan.term_months && !upcoming ? "completed" : plan.status;
-          return <article className="installment-card" key={plan.id}>
-            <div className="goal-meta"><div><strong>{plan.description}</strong><div className="muted">Purchased {plan.purchase_date} · First billed {plan.first_charge_date}</div></div><span className={`status-badge ${displayStatus === "active" ? "status-active" : "status-muted"}`}>{displayStatus}</span></div>
-            <div className="installment-metrics"><div><span>Total</span><strong>{money(Number(plan.total_amount))}</strong></div><div><span>Term</span><strong>{plan.term_months} months</strong></div><div><span>Posted</span><strong>{postedCount}/{plan.term_months}</strong></div><div><span>Next charge</span><strong>{upcoming ? `${upcoming.activity_date} · ${money(Number(upcoming.amount))}` : "None"}</strong></div></div>
+          return <article className="installment-card cc-installment-card" key={plan.id}>
+            <div className="cc-installment-head">
+              <div><strong className="cc-installment-title">{plan.description}</strong><div className="muted cc-installment-dates">Purchased {plan.purchase_date} · First billed {plan.first_charge_date}</div></div>
+              <span className={`status-badge ${displayStatus === "active" ? "status-active" : "status-muted"}`}>{displayStatus}</span>
+            </div>
+            <div className="cc-installment-summary">
+              <div><span>Total</span><strong>{money(Number(plan.total_amount))}</strong></div>
+              <div><span>Term</span><strong>{plan.term_months} months</strong></div>
+              <div><span>Posted</span><strong>{postedCount} / {plan.term_months}</strong></div>
+              <div><span>Next charge</span><strong>{upcoming ? <><span>{upcoming.activity_date}</span><span>{money(Number(upcoming.amount))}</span></> : "None"}</strong></div>
+            </div>
             <div className="progress-track"><div className="progress-bar" style={{ width: `${Math.min((postedCount / plan.term_months) * 100, 100)}%` }} /></div>
-            <div className="card-meta-row"><span>Scheduled {money(scheduledTotal)}</span><span>{categoryMap.get(plan.category_id ?? "") ?? "Uncategorized"} · {ownerMap.get(plan.owner_id ?? "") ?? "No owner"}</span></div>
-            {displayStatus === "active" && upcoming && <form action={cancelFutureInstallments}><input type="hidden" name="credit_card_id" value={card.id} /><input type="hidden" name="installment_id" value={plan.id} /><input type="hidden" name="today" value={today} /><button className="text-btn danger-text" type="submit">Cancel future charges</button></form>}
+            <div className="cc-installment-meta">
+              <span><b>Scheduled:</b> {money(scheduledTotal)}</span>
+              <span><b>Category:</b> {categoryMap.get(plan.category_id ?? "") ?? "Uncategorized"}</span>
+              <span><b>Owner:</b> {ownerMap.get(plan.owner_id ?? "") ?? "No owner"}</span>
+            </div>
+            <details className="cc-installment-edit">
+              <summary>Edit category & classification</summary>
+              <form action={updateInstallmentClassification} className="cc-installment-edit-form">
+                <input type="hidden" name="credit_card_id" value={card.id} />
+                <input type="hidden" name="installment_id" value={plan.id} />
+                <div className="field"><label htmlFor={`plan_category_${plan.id}`}>Category</label><select id={`plan_category_${plan.id}`} name="category_id" defaultValue={plan.category_id ?? preferredInstallmentCategory?.id ?? ""} required>{(categories ?? []).map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></div>
+                <div className="field"><label htmlFor={`plan_owner_${plan.id}`}>Owner / Charge to</label><select id={`plan_owner_${plan.id}`} name="owner_id" defaultValue={plan.owner_id ?? ""}><option value="">No owner</option>{(owners ?? []).map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></div>
+                <div className="field"><label htmlFor={`plan_need_${plan.id}`}>Need or Want</label><select id={`plan_need_${plan.id}`} name="need_want" defaultValue={schedule[0]?.need_want ?? "need"}><option value="need">Need</option><option value="want">Want</option></select></div>
+                <div className="field"><label htmlFor={`plan_fixed_${plan.id}`}>Expense type</label><select id={`plan_fixed_${plan.id}`} name="fixed_variable" defaultValue={schedule[0]?.fixed_variable ?? "fixed"}><option value="fixed">Fixed</option><option value="variable">Variable</option></select></div>
+                <button className="secondary-btn compact-btn" type="submit">Save plan details</button>
+              </form>
+            </details>
+            {displayStatus === "active" && upcoming && <form action={cancelFutureInstallments} className="cc-installment-actions"><input type="hidden" name="credit_card_id" value={card.id} /><input type="hidden" name="installment_id" value={plan.id} /><input type="hidden" name="today" value={today} /><button className="text-btn danger-text" type="submit">Cancel future charges</button></form>}
           </article>;
         })}</div>}
       </section>
