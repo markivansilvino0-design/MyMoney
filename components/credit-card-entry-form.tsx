@@ -28,7 +28,10 @@ export function CreditCardEntryForm({
   categories: Category[];
   owners: Owner[];
 }) {
+  const preferredExpenseCategory = categories.find((category) => category.name.toLowerCase() === "food") ?? categories.find((category) => category.name.toLowerCase() !== "credit card fees") ?? categories[0];
+  const feeCategory = categories.find((category) => category.name.toLowerCase() === "credit card fees") ?? categories[0];
   const [type, setType] = useState<ActivityType>("purchase");
+  const [categoryId, setCategoryId] = useState(preferredExpenseCategory?.id ?? "");
   const defaultOwner = owners.find((owner) => owner.is_default)?.id ?? owners[0]?.id ?? "";
   const expenseLike = type === "purchase" || type === "fee" || type === "interest";
   const showClassification = expenseLike;
@@ -48,7 +51,12 @@ export function CreditCardEntryForm({
             ["fee", "Fee", "!"] as const,
             ["interest", "Interest", "%"] as const,
           ]).map(([value, label, icon]) => (
-            <button key={value} type="button" className={`type-tab ${type === value ? "active" : ""}`} onClick={() => setType(value)}>
+            <button key={value} type="button" className={`type-tab ${type === value ? "active" : ""}`} onClick={() => {
+                setType(value);
+                if (value === "fee" || value === "interest") setCategoryId(feeCategory?.id ?? "");
+                else if (value === "refund") setCategoryId("");
+                else if (value === "purchase") setCategoryId(preferredExpenseCategory?.id ?? "");
+              }}>
               <span>{icon}</span>{label}
             </button>
           ))}
@@ -63,7 +71,7 @@ export function CreditCardEntryForm({
           <div className="field"><label htmlFor="cc_account_id">Pay from account</label><select id="cc_account_id" name="account_id" defaultValue={accounts[0]?.id ?? ""} required><option value="" disabled>Select account</option>{accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</select></div>
         ) : (
           <>
-            <div className="field"><label htmlFor="cc_category_id">Category{type === "refund" ? " (optional)" : ""}</label><select id="cc_category_id" name="category_id" defaultValue={categories[0]?.id ?? ""} required={type !== "refund"}><option value="">{type === "refund" ? "No category" : "Select category"}</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></div>
+            <div className="field"><label htmlFor="cc_category_id">Category{type === "refund" ? " (optional)" : ""}</label><select id="cc_category_id" name="category_id" value={categoryId} onChange={(event) => setCategoryId(event.target.value)} required={type !== "refund"}><option value="">{type === "refund" ? "No category" : "Select category"}</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></div>
             <div className="field"><label htmlFor="cc_owner_id">Owner / Charge to</label><select id="cc_owner_id" name="owner_id" defaultValue={defaultOwner}><option value="">No owner</option>{owners.map((owner) => <option key={owner.id} value={owner.id}>{owner.name}</option>)}</select></div>
           </>
         )}
