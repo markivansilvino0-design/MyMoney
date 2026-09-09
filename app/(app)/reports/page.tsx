@@ -46,27 +46,57 @@ export default async function ReportsPage({ searchParams }: { searchParams: Para
     .gte("contribution_date", from)
     .lte("contribution_date", to)
     .order("contribution_date");
+  let ccQuery = supabase
+    .from("credit_card_transactions")
+    .select("activity_date,activity_type,category_id,owner_id,amount,need_want,fixed_variable")
+    .gte("activity_date", from)
+    .lte("activity_date", to)
+    .lte("activity_date", today)
+    .order("activity_date");
+  let loanQuery = supabase
+    .from("loan_payments")
+    .select("payment_date,account_id,interest_amount,loans(loan_type)")
+    .gte("payment_date", from)
+    .lte("payment_date", to)
+    .order("payment_date");
 
   if (params.account) {
     txQuery = txQuery.or(`account_id.eq.${params.account},to_account_id.eq.${params.account}`);
     svQuery = svQuery.or(`from_account_id.eq.${params.account},to_account_id.eq.${params.account}`);
+    loanQuery = loanQuery.eq("account_id", params.account);
   }
-  if (params.category) txQuery = txQuery.eq("category_id", params.category);
-  if (params.owner) txQuery = txQuery.eq("owner_id", params.owner);
+  if (params.category) { txQuery = txQuery.eq("category_id", params.category); ccQuery = ccQuery.eq("category_id", params.category); }
+  if (params.owner) { txQuery = txQuery.eq("owner_id", params.owner); ccQuery = ccQuery.eq("owner_id", params.owner); }
 
   const includeSavings = !params.category && !params.owner;
-  const [{ data: transactions }, { data: savings }] = await Promise.all([
+  const includeCardExpenses = !params.account;
+  const includeLoanInterest = !params.category && !params.owner;
+  const [{ data: transactions }, { data: savings }, { data: cardActivity }, { data: loanPayments }] = await Promise.all([
     txQuery,
     includeSavings ? svQuery : Promise.resolve({ data: [] as never[] }),
+    includeCardExpenses ? ccQuery : Promise.resolve({ data: [] as never[] }),
+    includeLoanInterest ? loanQuery : Promise.resolve({ data: [] as never[] }),
   ]);
 
   const txRows = transactions ?? [];
   const svRows = savings ?? [];
+  const ccRows = cardActivity ?? [];
+  const loanRows = loanPayments ?? [];
   const categoryMap = new Map((categories ?? []).map((row) => [row.id, row.name]));
   const ownerMap = new Map((owners ?? []).map((row) => [row.id, row.name]));
 
-  const income = txRows.filter((row) => row.transaction_type === "income").reduce((sum, row) => sum + Number(row.amount), 0);
-  const expenses = txRows.filter((row) => row.transaction_type === "expense").reduce((sum, row) => sum + Number(row.amount), 0);
+  const cashIncome = txRows.filter((row) => row.transaction_type === "income").reduce((sum, row) => sum + Number(row.amount), 0);
+  const cashExpenses = txRows.filter((row) => row.transaction_type === "expense").reduce((sum, row) => sum + Number(row.amount), 0);
+  const cardExpenses = ccRows.reduce((sum, row) => {
+    const amount = Number(row.amount);
+    if (["purchase", "fee", "interest"].includes(row.activity_type)) return sum + amount;
+    if (row.activity_type === "refund") return sum - amount;
+    return sum;
+  }, 0);
+  const loanInterestIncome = loanRows.reduce((sum, row) => { const relation = Array.isArray(row.loans) ? row.loans[0] : row.loans; return relation?.loan_type === "lent" ? sum + Number(row.interest_amount) : sum; }, 0);
+  const loanInterestExpense = loanRows.reduce((sum, row) => { const relation = Array.isArray(row.loans) ? row.loans[0] : row.loans; return relation?.loan_type === "borrowed" ? sum + Number(row.interest_amount) : sum; }, 0);
+  const income = cashIncome + loanInterestIncome;
+  const expenses = cashExpenses + cardExpenses + loanInterestExpense;
   const netSavings = svRows.reduce((sum, row) => sum + savingsGoalImpact(row.entry_type, row.amount), 0);
   const freeCashFlow = income - expenses - netSavings;
   const savingsRate = income > 0 ? (netSavings / income) * 100 : 0;
@@ -96,6 +126,35 @@ export default async function ReportsPage({ searchParams }: { searchParams: Para
     monthly.set(month, bucket);
   }
 
+  for (const row of ccRows) {
+    if (!["purchase", "fee", "interest", "refund"].includes(row.activity_type)) continue;
+    const sign = row.activity_type === "refund" ? -1 : 1;
+    const amount = Number(row.amount) * sign;
+    const month = row.activity_date.slice(0, 7);
+    const bucket = monthly.get(month) ?? { income: 0, expense: 0, savings: 0 };
+    bucket.expense += amount;
+    const category = row.category_id ? categoryMap.get(row.category_id) ?? "Uncategorized" : "Uncategorized";
+    byCategory.set(category, (byCategory.get(category) ?? 0) + amount);
+    const owner = row.owner_id ? ownerMap.get(row.owner_id) ?? "No owner" : "No owner";
+    byOwner.set(owner, (byOwner.get(owner) ?? 0) + amount);
+    const nw = row.need_want === "want" ? "Wants" : row.need_want === "need" ? "Needs" : "Unclassified";
+    byNeedWant.set(nw, (byNeedWant.get(nw) ?? 0) + amount);
+    const fv = row.fixed_variable === "fixed" ? "Fixed" : row.fixed_variable === "variable" ? "Variable" : "Unclassified";
+    byFixedVariable.set(fv, (byFixedVariable.get(fv) ?? 0) + amount);
+    monthly.set(month, bucket);
+  }
+
+  for (const row of loanRows) {
+    const relation = Array.isArray(row.loans) ? row.loans[0] : row.loans;
+    const interest = Number(row.interest_amount);
+    if (!interest || !relation?.loan_type) continue;
+    const month = row.payment_date.slice(0, 7);
+    const bucket = monthly.get(month) ?? { income: 0, expense: 0, savings: 0 };
+    if (relation.loan_type === "lent") bucket.income += interest;
+    if (relation.loan_type === "borrowed") bucket.expense += interest;
+    monthly.set(month, bucket);
+  }
+
   for (const row of svRows) {
     const month = row.contribution_date.slice(0, 7);
     const bucket = monthly.get(month) ?? { income: 0, expense: 0, savings: 0 };
@@ -115,7 +174,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Para
   return (
     <main className="main">
       <div className="page-heading">
-        <div><div className="eyebrow">Analyze</div><h2>Reports</h2><p>Understand where your money came from, where it went, and how much you kept.</p></div>
+        <div><div className="eyebrow">Analyze</div><h2>Reports</h2><p>Understand income, spending, loan interest, and how much you kept.</p></div>
       </div>
 
       <section className="panel report-filter-panel">
@@ -131,7 +190,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Para
 
       <section className="cards report-stats">
         <div className="stat-card"><div className="stat-label">Income</div><div className="stat-value positive">{money(income)}</div><div className="stat-foot">Money received</div></div>
-        <div className="stat-card"><div className="stat-label">Expenses</div><div className="stat-value negative">{money(expenses)}</div><div className="stat-foot">Money spent</div></div>
+        <div className="stat-card"><div className="stat-label">Expenses</div><div className="stat-value negative">{money(expenses)}</div><div className="stat-foot">Cash + card + loan interest</div></div>
         <div className="stat-card"><div className="stat-label">Net savings</div><div className={`stat-value ${netSavings < 0 ? "negative" : "positive"}`}>{money(netSavings)}</div><div className="stat-foot">Savings rate {percentLabel(savingsRate)}</div></div>
         <div className="stat-card stat-card-accent"><div className="stat-label">Available cash flow</div><div className={`stat-value ${freeCashFlow < 0 ? "negative" : ""}`}>{money(freeCashFlow)}</div><div className="stat-foot">Income − expenses − savings</div></div>
       </section>
