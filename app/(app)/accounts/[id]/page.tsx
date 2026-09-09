@@ -17,13 +17,15 @@ export default async function AccountDetailPage({ params, searchParams }: {
   const notices = await searchParams;
   const supabase = await createClient();
 
-  const [{ data: account }, { data: transactions }, { data: savings }, { data: goals }, { data: cardPayments }, { data: cards }] = await Promise.all([
+  const [{ data: account }, { data: transactions }, { data: savings }, { data: goals }, { data: cardPayments }, { data: cards }, { data: loanFunding }, { data: loanPayments }] = await Promise.all([
     supabase.from("accounts").select("id,name,account_type,opening_balance,is_active,created_at").eq("id", id).maybeSingle(),
     supabase.from("transactions").select("id,transaction_date,transaction_type,account_id,to_account_id,amount,description,created_at").or(`account_id.eq.${id},to_account_id.eq.${id}`).order("transaction_date", { ascending: false }).limit(200),
     supabase.from("savings_contributions").select("id,contribution_date,from_account_id,to_account_id,saving_mode,entry_type,amount,description,notes,savings_goal_id,created_at").or(`from_account_id.eq.${id},to_account_id.eq.${id}`).order("contribution_date", { ascending: false }).limit(200),
     supabase.from("savings_goals").select("id,name"),
     supabase.from("credit_card_transactions").select("id,credit_card_id,activity_date,activity_type,account_id,amount,description,created_at").eq("activity_type", "payment").eq("account_id", id).order("activity_date", { ascending: false }).limit(200),
     supabase.from("credit_cards").select("id,name"),
+    supabase.from("loans").select("id,loan_type,name,funding_account_id,principal_amount,record_initial_cash,created_at,start_date").eq("funding_account_id", id),
+    supabase.from("loan_payments").select("id,loan_id,payment_date,account_id,principal_amount,interest_amount,notes,created_at,loans(loan_type,name)").eq("account_id", id).order("payment_date", { ascending: false }).limit(200),
   ]);
 
   if (!account) notFound();
@@ -32,7 +34,7 @@ export default async function AccountDetailPage({ params, searchParams }: {
   const goalMap = new Map((goals ?? []).map((goal) => [goal.id, goal.name]));
   const cardPaymentRows = cardPayments ?? [];
   const cardMap = new Map((cards ?? []).map((card) => [card.id, card.name]));
-  const balance = accountBalance(account, txRows, savingsRows, cardPaymentRows);
+  const balance = accountBalance(account, txRows, savingsRows, cardPaymentRows, loanFunding ?? [], loanPayments ?? []);
 
   let inflow = 0;
   let outflow = 0;
@@ -71,6 +73,21 @@ export default async function AccountDetailPage({ params, searchParams }: {
       outflow += amount;
       const cardName = cardMap.get(row.credit_card_id) ?? "Credit card";
       return { key: `cc-${row.id}`, href: `/credit-cards/${row.credit_card_id}`, date: row.activity_date, createdAt: row.created_at, description: row.description || `Payment to ${cardName}`, type: "credit card payment", delta: -amount, amount };
+    }),
+    ...(loanFunding ?? []).filter((row) => row.record_initial_cash).map((row) => {
+      const amount = Number(row.principal_amount);
+      const delta = row.loan_type === "borrowed" ? amount : -amount;
+      if (delta > 0) inflow += delta; else outflow += Math.abs(delta);
+      return { key: `loan-open-${row.id}`, href: `/loans/${row.id}`, date: row.start_date, createdAt: row.created_at, description: row.loan_type === "borrowed" ? `Loan proceeds · ${row.name}` : `Money lent · ${row.name}`, type: row.loan_type === "borrowed" ? "loan proceeds" : "loan disbursement", delta, amount };
+    }),
+    ...(loanPayments ?? []).map((row) => {
+      const amount = Number(row.principal_amount) + Number(row.interest_amount);
+      const relation = Array.isArray(row.loans) ? row.loans[0] : row.loans;
+      const loanType = relation?.loan_type ?? "borrowed";
+      const loanName = relation?.name ?? "Loan";
+      const delta = loanType === "borrowed" ? -amount : amount;
+      if (delta > 0) inflow += delta; else outflow += Math.abs(delta);
+      return { key: `loan-pay-${row.id}`, href: `/loans/${row.loan_id}`, date: row.payment_date, createdAt: row.created_at, description: row.notes || (loanType === "borrowed" ? `Loan repayment · ${loanName}` : `Loan collection · ${loanName}`), type: loanType === "borrowed" ? "loan repayment" : "loan collection", delta, amount };
     }),
   ].sort((a, b) => `${b.date} ${b.createdAt}`.localeCompare(`${a.date} ${a.createdAt}`));
 
