@@ -166,7 +166,7 @@ export default async function RecurringPage({ searchParams }: { searchParams: Pa
             return <article className={`recurring-due-row ${isDue ? "is-due" : ""}`} key={occurrence.id}>
               <div className="recurring-date-chip"><strong>{occurrence.due_date.slice(8, 10)}</strong><span>{new Intl.DateTimeFormat("en-PH", { month: "short", timeZone: "UTC" }).format(new Date(`${occurrence.due_date}T00:00:00Z`))}</span></div>
               <div className="recurring-due-copy"><div className="recurring-rule-title"><strong>{rule.name}</strong><span className={`type-badge recurring-type-${rule.rule_type}`}>{typeLabel(rule.rule_type)}</span>{rule.auto_post && <span className="status-badge status-active">Auto</span>}</div><span className="muted">{frequencyLabel(rule.frequency)} · {isDue ? (occurrence.due_date < today ? "Overdue" : "Due today") : "Upcoming"}</span></div>
-              <strong className="recurring-due-amount">{money(occurrence.amount)}</strong>
+              <strong className="recurring-due-amount">{money(Number(occurrence.amount))}</strong>
               {isDue ? <div className="recurring-row-actions"><form action={postRecurringOccurrence}><input type="hidden" name="id" value={occurrence.id} /><button className="primary-btn compact-btn" type="submit">Post</button></form><form action={skipRecurringOccurrence}><input type="hidden" name="id" value={occurrence.id} /><button className="secondary-btn compact-btn" type="submit">Skip</button></form></div> : <span className="muted recurring-upcoming-label">Scheduled</span>}
             </article>;
           })}
@@ -184,7 +184,7 @@ export default async function RecurringPage({ searchParams }: { searchParams: Pa
           {visibleRules.length === 0 ? <div className="empty">No recurring items yet.</div> : <div className="recurring-rule-list">{visibleRules.map((rule) => {
             const next = [...due, ...upcoming, ...monthOccurrences].filter((o) => o.recurring_rule_id === rule.id && o.status === "scheduled" && o.due_date >= today).sort((a, b) => a.due_date.localeCompare(b.due_date))[0];
             return <article className="recurring-rule-card" key={rule.id}>
-              <div className="recurring-rule-head"><div><strong>{rule.name}</strong><div className="recurring-rule-tags"><span className={`type-badge recurring-type-${rule.rule_type}`}>{typeLabel(rule.rule_type)}</span><span className={`status-badge ${rule.status === "active" ? "status-active" : "status-warning"}`}>{rule.status}</span>{rule.auto_post && <span className="status-badge status-active">Auto-post</span>}</div></div><strong>{money(rule.amount)}</strong></div>
+              <div className="recurring-rule-head"><div><strong>{rule.name}</strong><div className="recurring-rule-tags"><span className={`type-badge recurring-type-${rule.rule_type}`}>{typeLabel(rule.rule_type)}</span><span className={`status-badge ${rule.status === "active" ? "status-active" : "status-warning"}`}>{rule.status}</span>{rule.auto_post && <span className="status-badge status-active">Auto-post</span>}</div></div><strong>{money(Number(rule.amount))}</strong></div>
               <div className="recurring-rule-meta"><span>{frequencyLabel(rule.frequency)}</span><span>Starts {rule.start_date}</span><span>{next ? `Next ${next.due_date}` : rule.end_date ? `Ends ${rule.end_date}` : "Schedule generated"}</span></div>
               <div className="recurring-rule-actions">{rule.status === "active" ? <form action={setRecurringRuleStatus}><input type="hidden" name="id" value={rule.id} /><input type="hidden" name="status" value="paused" /><button className="secondary-btn compact-btn" type="submit">Pause</button></form> : <form action={setRecurringRuleStatus}><input type="hidden" name="id" value={rule.id} /><input type="hidden" name="status" value="active" /><button className="secondary-btn compact-btn" type="submit">Resume</button></form>}<form action={setRecurringRuleStatus}><input type="hidden" name="id" value={rule.id} /><input type="hidden" name="status" value="archived" /><button className="text-btn danger-text" type="submit">Archive</button></form></div>
             </article>;
@@ -200,7 +200,7 @@ export default async function RecurringPage({ searchParams }: { searchParams: Pa
           return <div key={day.iso} className={`calendar-day ${day.inMonth ? "" : "outside"} ${day.iso === today ? "today" : ""}`}><div className="calendar-day-number">{day.day}</div><div className="calendar-events">{events.slice(0, 3).map((event) => {
             const rule = ruleMap.get(event.recurring_rule_id);
             if (!rule) return null;
-            return <div key={event.id} className={`calendar-event event-${rule.rule_type} event-${event.status}`} title={`${rule.name} — ${money(event.amount)}`}><span>{rule.name}</span><strong>{money(event.amount)}</strong></div>;
+            return <div key={event.id} className={`calendar-event event-${rule.rule_type} event-${event.status}`} title={`${rule.name} — ${money(Number(event.amount))}`}><span>{rule.name}</span><strong>{money(Number(event.amount))}</strong></div>;
           })}{events.length > 3 && <span className="calendar-more">+{events.length - 3} more</span>}</div></div>;
         })}</div>
       </section>
