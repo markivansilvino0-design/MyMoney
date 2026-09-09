@@ -8,18 +8,20 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
   const notices = await searchParams;
   const supabase = await createClient();
 
-  const [{ data: accounts }, { data: transactions }, { data: savings }, { data: cardPayments }] = await Promise.all([
+  const [{ data: accounts }, { data: transactions }, { data: savings }, { data: cardPayments }, { data: loans }, { data: loanPayments }] = await Promise.all([
     supabase.from("accounts").select("id,name,account_type,opening_balance,is_active").order("is_active", { ascending: false }).order("name"),
     supabase.from("transactions").select("transaction_type,account_id,to_account_id,amount"),
     supabase.from("savings_contributions").select("from_account_id,to_account_id,saving_mode,amount"),
     supabase.from("credit_card_transactions").select("activity_type,account_id,amount").eq("activity_type", "payment"),
+    supabase.from("loans").select("loan_type,funding_account_id,principal_amount,record_initial_cash"),
+    supabase.from("loan_payments").select("account_id,principal_amount,interest_amount,loans(loan_type)"),
   ]);
 
   const transactionRows = transactions ?? [];
   const savingsRows = savings ?? [];
   const rows = (accounts ?? []).map((account) => ({
     ...account,
-    balance: accountBalance(account, transactionRows, savingsRows, cardPayments ?? []),
+    balance: accountBalance(account, transactionRows, savingsRows, cardPayments ?? [], loans ?? [], loanPayments ?? []),
   }));
   const totalBalance = rows.reduce((sum, row) => sum + row.balance, 0);
   const activeCount = rows.filter((row) => row.is_active).length;
