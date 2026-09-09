@@ -23,6 +23,21 @@ export type CreditCardPaymentRow = {
   amount: number | string;
 };
 
+export type LoanFundingRow = {
+  loan_type: string;
+  funding_account_id: string | null;
+  principal_amount: number | string;
+  record_initial_cash?: boolean | null;
+};
+
+export type LoanPaymentRow = {
+  account_id: string | null;
+  principal_amount: number | string;
+  interest_amount: number | string;
+  loans?: { loan_type?: string | null } | null;
+  loan_type?: string | null;
+};
+
 export function savingsGoalImpact(entryType: string | null | undefined, amount: number | string) {
   const value = Number(amount);
   return entryType === "withdrawal" ? -value : value;
@@ -33,6 +48,8 @@ export function accountBalance(
   transactions: MoneyTransactionRow[],
   savingsEntries: SavingsActivityRow[],
   cardActivities: CreditCardPaymentRow[] = [],
+  loans: LoanFundingRow[] = [],
+  loanPayments: LoanPaymentRow[] = [],
 ) {
   let balance = Number(account.opening_balance ?? 0);
 
@@ -55,6 +72,21 @@ export function accountBalance(
     if (activity.activity_type === "payment" && activity.account_id === account.id) {
       balance -= Number(activity.amount);
     }
+  }
+
+  for (const loan of loans) {
+    if (!loan.record_initial_cash || loan.funding_account_id !== account.id) continue;
+    const principal = Number(loan.principal_amount);
+    if (loan.loan_type === "borrowed") balance += principal;
+    if (loan.loan_type === "lent") balance -= principal;
+  }
+
+  for (const payment of loanPayments) {
+    if (payment.account_id !== account.id) continue;
+    const amount = Number(payment.principal_amount) + Number(payment.interest_amount);
+    const loanType = payment.loan_type ?? payment.loans?.loan_type ?? "";
+    if (loanType === "borrowed") balance -= amount;
+    if (loanType === "lent") balance += amount;
   }
 
   return balance;
