@@ -37,6 +37,9 @@ export default async function DashboardPage() {
     { data: recentCardActivity },
     { data: recurringOccurrences },
     { data: recurringRules },
+    { data: monthLoanPayments },
+    { data: recentLoanPayments },
+    { data: activeLoans },
   ] = await Promise.all([
     supabase.from("transactions").select("transaction_type,amount").gte("transaction_date", monthStart),
     supabase.from("transactions").select("id,transaction_date,transaction_type,amount,description,created_at").order("transaction_date", { ascending: false }).order("created_at", { ascending: false }).limit(8),
@@ -47,10 +50,13 @@ export default async function DashboardPage() {
     supabase.from("credit_card_transactions").select("id,credit_card_id,activity_date,activity_type,amount,description,created_at").lte("activity_date", today).order("activity_date", { ascending: false }).order("created_at", { ascending: false }).limit(8),
     supabase.from("recurring_occurrences").select("id,recurring_rule_id,due_date,amount,status").eq("status", "scheduled").lte("due_date", addDays(today, 7)).order("due_date").limit(6),
     supabase.from("recurring_rules").select("id,name,rule_type,auto_post,status").eq("status", "active"),
+    supabase.from("loan_payments").select("payment_date,principal_amount,interest_amount,loan_id,loans(loan_type,name)").gte("payment_date", monthStart).lte("payment_date", today),
+    supabase.from("loan_payments").select("id,loan_id,payment_date,principal_amount,interest_amount,notes,created_at,loans(loan_type,name)").order("payment_date", { ascending: false }).order("created_at", { ascending: false }).limit(8),
+    supabase.from("loans").select("id,loan_type,principal_amount,status,loan_payments(principal_amount)").in("status", ["active","paused"]),
   ]);
 
   const monthRows = monthTransactions ?? [];
-  const income = monthRows.filter((transaction) => transaction.transaction_type === "income").reduce((sum, transaction) => sum + Number(transaction.amount), 0);
+  const cashIncome = monthRows.filter((transaction) => transaction.transaction_type === "income").reduce((sum, transaction) => sum + Number(transaction.amount), 0);
   const cashExpenses = monthRows.filter((transaction) => transaction.transaction_type === "expense").reduce((sum, transaction) => sum + Number(transaction.amount), 0);
   const cardExpenses = (monthCardActivity ?? []).reduce((sum, row) => {
     const amount = Number(row.amount);
@@ -58,17 +64,24 @@ export default async function DashboardPage() {
     if (row.activity_type === "refund") return sum - amount;
     return sum;
   }, 0);
-  const expenses = cashExpenses + cardExpenses;
+  const loanInterestIncome = (monthLoanPayments ?? []).reduce((sum, row) => { const relation = Array.isArray(row.loans) ? row.loans[0] : row.loans; return relation?.loan_type === "lent" ? sum + Number(row.interest_amount) : sum; }, 0);
+  const loanInterestExpense = (monthLoanPayments ?? []).reduce((sum, row) => { const relation = Array.isArray(row.loans) ? row.loans[0] : row.loans; return relation?.loan_type === "borrowed" ? sum + Number(row.interest_amount) : sum; }, 0);
+  const income = cashIncome + loanInterestIncome;
+  const expenses = cashExpenses + cardExpenses + loanInterestExpense;
   const savings = (monthContributions ?? []).reduce((sum, entry) => sum + savingsGoalImpact(entry.entry_type, entry.amount), 0);
   const available = income - expenses - savings;
   const savingsRate = income > 0 ? (savings / income) * 100 : 0;
   const expenseRate = income > 0 ? (expenses / income) * 100 : 0;
 
   const recent = [
-    ...(recentTransactions ?? []).map((transaction) => ({ kind: "tx", id: transaction.id, cardId: "", date: transaction.transaction_date, type: transaction.transaction_type, entryType: "", amount: Number(transaction.amount), description: transaction.description || (transaction.transaction_type === "transfer" ? "Account transfer" : "—"), created_at: transaction.created_at })),
-    ...(recentContributions ?? []).map((entry) => ({ kind: "sv", id: entry.id, cardId: "", date: entry.contribution_date, type: "savings", entryType: entry.entry_type ?? "deposit", amount: Number(entry.amount), description: entry.description || entry.notes || (entry.entry_type === "withdrawal" ? "Savings withdrawal" : "Savings deposit"), created_at: entry.created_at })),
-    ...(recentCardActivity ?? []).map((entry) => ({ kind: "cc", id: entry.id, cardId: entry.credit_card_id, date: entry.activity_date, type: "credit_card", entryType: entry.activity_type, amount: Number(entry.amount), description: entry.description || `Credit card ${entry.activity_type}`, created_at: entry.created_at })),
+    ...(recentTransactions ?? []).map((transaction) => ({ kind: "tx", id: transaction.id, cardId: "", loanId: "", date: transaction.transaction_date, type: transaction.transaction_type, entryType: "", amount: Number(transaction.amount), description: transaction.description || (transaction.transaction_type === "transfer" ? "Account transfer" : "—"), created_at: transaction.created_at })),
+    ...(recentContributions ?? []).map((entry) => ({ kind: "sv", id: entry.id, cardId: "", loanId: "", date: entry.contribution_date, type: "savings", entryType: entry.entry_type ?? "deposit", amount: Number(entry.amount), description: entry.description || entry.notes || (entry.entry_type === "withdrawal" ? "Savings withdrawal" : "Savings deposit"), created_at: entry.created_at })),
+    ...(recentCardActivity ?? []).map((entry) => ({ kind: "cc", id: entry.id, cardId: entry.credit_card_id, loanId: "", date: entry.activity_date, type: "credit_card", entryType: entry.activity_type, amount: Number(entry.amount), description: entry.description || `Credit card ${entry.activity_type}`, created_at: entry.created_at })),
+    ...(recentLoanPayments ?? []).map((entry) => { const relation = Array.isArray(entry.loans) ? entry.loans[0] : entry.loans; const loanType = relation?.loan_type ?? "borrowed"; return { kind: "loan", id: entry.id, cardId: "", loanId: entry.loan_id, date: entry.payment_date, type: "loan", entryType: loanType, amount: Number(entry.principal_amount) + Number(entry.interest_amount), description: entry.notes || (loanType === "borrowed" ? `Loan repayment · ${relation?.name ?? "Loan"}` : `Loan collection · ${relation?.name ?? "Loan"}`), created_at: entry.created_at }; }),
   ].sort((a, b) => `${b.date} ${b.created_at}`.localeCompare(`${a.date} ${a.created_at}`)).slice(0, 8);
+
+  const borrowedPrincipal = (activeLoans ?? []).filter((row) => row.loan_type === "borrowed").reduce((sum, row) => { const paid = (row.loan_payments ?? []).reduce((subtotal, payment) => subtotal + Number(payment.principal_amount), 0); return sum + Math.max(Number(row.principal_amount) - paid, 0); }, 0);
+  const lentPrincipal = (activeLoans ?? []).filter((row) => row.loan_type === "lent").reduce((sum, row) => { const paid = (row.loan_payments ?? []).reduce((subtotal, payment) => subtotal + Number(payment.principal_amount), 0); return sum + Math.max(Number(row.principal_amount) - paid, 0); }, 0);
 
   const recurringRuleMap = new Map((recurringRules ?? []).map((rule) => [rule.id, rule]));
   const recurringSoon = (recurringOccurrences ?? []).map((occurrence) => ({ ...occurrence, rule: recurringRuleMap.get(occurrence.recurring_rule_id) })).filter((entry) => entry.rule);
@@ -109,6 +122,8 @@ export default async function DashboardPage() {
         </div>
       </section>
 
+      {(borrowedPrincipal > 0 || lentPrincipal > 0) && <section className="panel loan-dashboard-panel"><div className="section-heading"><div><h3>Loans & receivables</h3><p className="muted">Principal is tracked separately from income and expenses.</p></div><Link className="text-btn" href="/loans">Open loans</Link></div><div className="loan-dashboard-split"><div><span>I owe</span><strong className="negative">{money(borrowedPrincipal)}</strong></div><div><span>Owed to me</span><strong className="positive">{money(lentPrincipal)}</strong></div></div></section>}
+
       {recurringSoon.length > 0 && <section className="panel recurring-dashboard-panel">
         <div className="section-heading"><div><h3>Due & upcoming</h3><p className="muted">Recurring items due today or within the next 7 days.</p></div><Link className="text-btn" href="/recurring">Open recurring</Link></div>
         <div className="dashboard-recurring-list">{recurringSoon.map((entry) => {
@@ -125,10 +140,11 @@ export default async function DashboardPage() {
             const savingsWithdrawal = entry.type === "savings" && entry.entryType === "withdrawal";
             const cardRefund = entry.type === "credit_card" && entry.entryType === "refund";
             const cardPayment = entry.type === "credit_card" && entry.entryType === "payment";
-            const positive = entry.type === "income" || savingsWithdrawal || cardRefund;
-            const negative = entry.type === "expense" || (entry.type === "savings" && !savingsWithdrawal) || (entry.type === "credit_card" && !cardRefund && !cardPayment);
-            const label = entry.type === "savings" ? (savingsWithdrawal ? "savings withdrawal" : "savings deposit") : entry.type === "credit_card" ? `card ${entry.entryType}` : entry.type;
-            const href = entry.kind === "cc" ? `/credit-cards/${entry.cardId}` : `/transactions/${entry.kind}/${entry.id}`;
+            const loanCollection = entry.type === "loan" && entry.entryType === "lent";
+            const positive = entry.type === "income" || savingsWithdrawal || cardRefund || loanCollection;
+            const negative = entry.type === "expense" || (entry.type === "savings" && !savingsWithdrawal) || (entry.type === "credit_card" && !cardRefund && !cardPayment) || (entry.type === "loan" && !loanCollection);
+            const label = entry.type === "savings" ? (savingsWithdrawal ? "savings withdrawal" : "savings deposit") : entry.type === "credit_card" ? `card ${entry.entryType}` : entry.type === "loan" ? (loanCollection ? "loan collection" : "loan repayment") : entry.type;
+            const href = entry.kind === "cc" ? `/credit-cards/${entry.cardId}` : entry.kind === "loan" ? `/loans/${entry.loanId}` : `/transactions/${entry.kind}/${entry.id}`;
             return <tr key={`${entry.kind}-${entry.id}`}><td><Link href={href}>{entry.date}</Link></td><td><Link href={href}><strong>{entry.description}</strong></Link></td><td><Link href={href}><span className={`type-badge type-${entry.type}`}>{label}</span></Link></td><td className={positive ? "positive amount-cell" : negative ? "negative amount-cell" : "amount-cell"}><Link href={href}>{positive ? "+" : negative ? "−" : "↔ "}{money(entry.amount)}</Link></td></tr>;
           })}</tbody></table></div>
         )}
