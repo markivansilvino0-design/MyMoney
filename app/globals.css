@@ -821,3 +821,59 @@ tbody tr:hover td { background: #fafcff; }
   .loan-card-meta, .loan-dashboard-split { grid-template-columns: 1fr; }
   .loan-card-meta { display: grid; }
 }
+
+/* Phase 9 — Financial Overview & Net Worth */
+.net-worth-stats { margin-bottom: 16px; }
+.net-worth-grid { align-items: start; }
+.balance-sheet-columns { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
+.balance-sheet-side { display: grid; gap: 8px; padding: 13px; border: 1px solid var(--border); border-radius: 14px; background: #fbfcfe; }
+.balance-sheet-side h4 { margin: 0 0 3px; font-size: 12px; }
+.balance-line, .balance-total { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 7px 0; }
+.balance-line { border-bottom: 1px solid #edf0f5; color: var(--muted); font-size: 10px; }
+.balance-line strong { color: var(--text); font-size: 11px; white-space: nowrap; }
+.balance-total { margin-top: 2px; font-size: 11px; font-weight: 850; }
+.balance-total strong { font-size: 14px; }
+.net-worth-equation { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 13px; padding: 12px; border: 1px solid #cbd8f4; border-radius: 13px; background: #f7f9ff; font-size: 12px; }
+.net-worth-equation strong { font-size: 18px; }
+.financial-health-panel { display: grid; gap: 13px; }
+.health-metric { display: grid; gap: 6px; }
+.health-metric > div:first-child { display: flex; justify-content: space-between; gap: 12px; font-size: 10.5px; }
+.health-metric small { color: var(--muted); font-size: 9px; }
+.health-cards { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 9px; }
+.health-cards > div { display: grid; gap: 5px; padding: 11px; border: 1px solid var(--border); border-radius: 12px; background: #fafbfd; }
+.health-cards span { color: var(--muted); font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+.health-cards strong { font-size: 15px; }
+.health-cards small { color: var(--muted); font-size: 8.5px; }
+.position-list { display: grid; gap: 7px; }
+.position-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 11px; border: 1px solid var(--border); border-radius: 12px; background: #fff; transition: border-color .15s ease, transform .15s ease; }
+.position-row:hover { transform: translateY(-1px); border-color: #c9d6f1; }
+.position-row > div { display: grid; gap: 3px; min-width: 0; }
+.position-row > div strong { font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.position-row > div span { color: var(--muted); font-size: 9px; }
+.position-row > strong { font-size: 11px; white-space: nowrap; }
+.snapshot-panel { overflow: hidden; }
+.snapshot-form { display: grid; grid-template-columns: 180px minmax(220px,1fr) auto; gap: 10px; align-items: end; padding: 12px; border: 1px solid var(--border); border-radius: 13px; background: #fafbfd; }
+.snapshot-delta { font-size: 10px; font-weight: 850; white-space: nowrap; }
+.snapshot-bars { display: grid; gap: 7px; margin: 16px 0; }
+.snapshot-bar-row { display: grid; grid-template-columns: 68px minmax(0,1fr) 110px; gap: 8px; align-items: center; font-size: 9.5px; }
+.snapshot-bar-row > span { color: var(--muted); }
+.snapshot-bar-row > strong { text-align: right; font-size: 10px; }
+.snapshot-bar-track { height: 8px; overflow: hidden; border-radius: 999px; background: #edf0f5; }
+.snapshot-bar { height: 100%; border-radius: inherit; }
+.snapshot-bar.is-positive { background: #20b178; }
+.snapshot-bar.is-negative { background: #e65b68; }
+.snapshot-total-change { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 10.5px; }
+.snapshot-total-change strong { font-size: 13px; }
+
+@media (max-width: 900px) {
+  .balance-sheet-columns { grid-template-columns: 1fr; }
+  .snapshot-form { grid-template-columns: 1fr 1fr; }
+  .snapshot-form .filter-actions { grid-column: 1 / -1; }
+}
+@media (max-width: 620px) {
+  .health-cards, .snapshot-form { grid-template-columns: 1fr; }
+  .snapshot-form .filter-actions { grid-column: auto; }
+  .snapshot-bar-row { grid-template-columns: 60px minmax(0,1fr); }
+  .snapshot-bar-row > strong { grid-column: 2; text-align: left; }
+  .net-worth-equation { flex-wrap: wrap; }
+}
