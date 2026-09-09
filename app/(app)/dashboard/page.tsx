@@ -17,6 +17,12 @@ function pctLabel(value: number) {
   return `${value.toFixed(0)}%`;
 }
 
+function addDays(date: string, days: number) {
+  const [year, month, day] = date.split("-").map(Number);
+  const d = new Date(Date.UTC(year, month - 1, day + days));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
 export default async function DashboardPage() {
   const supabase = await createClient();
   const { monthStart, today, monthLabel } = currentMonthParts();
@@ -29,6 +35,8 @@ export default async function DashboardPage() {
     { data: recentContributions },
     { data: monthCardActivity },
     { data: recentCardActivity },
+    { data: recurringOccurrences },
+    { data: recurringRules },
   ] = await Promise.all([
     supabase.from("transactions").select("transaction_type,amount").gte("transaction_date", monthStart),
     supabase.from("transactions").select("id,transaction_date,transaction_type,amount,description,created_at").order("transaction_date", { ascending: false }).order("created_at", { ascending: false }).limit(8),
@@ -37,6 +45,8 @@ export default async function DashboardPage() {
     supabase.from("savings_contributions").select("id,contribution_date,amount,entry_type,description,notes,created_at").order("contribution_date", { ascending: false }).order("created_at", { ascending: false }).limit(8),
     supabase.from("credit_card_transactions").select("activity_type,amount").gte("activity_date", monthStart).lte("activity_date", today),
     supabase.from("credit_card_transactions").select("id,credit_card_id,activity_date,activity_type,amount,description,created_at").lte("activity_date", today).order("activity_date", { ascending: false }).order("created_at", { ascending: false }).limit(8),
+    supabase.from("recurring_occurrences").select("id,recurring_rule_id,due_date,amount,status").eq("status", "scheduled").lte("due_date", addDays(today, 7)).order("due_date").limit(6),
+    supabase.from("recurring_rules").select("id,name,rule_type,auto_post,status").eq("status", "active"),
   ]);
 
   const monthRows = monthTransactions ?? [];
@@ -59,6 +69,9 @@ export default async function DashboardPage() {
     ...(recentContributions ?? []).map((entry) => ({ kind: "sv", id: entry.id, cardId: "", date: entry.contribution_date, type: "savings", entryType: entry.entry_type ?? "deposit", amount: Number(entry.amount), description: entry.description || entry.notes || (entry.entry_type === "withdrawal" ? "Savings withdrawal" : "Savings deposit"), created_at: entry.created_at })),
     ...(recentCardActivity ?? []).map((entry) => ({ kind: "cc", id: entry.id, cardId: entry.credit_card_id, date: entry.activity_date, type: "credit_card", entryType: entry.activity_type, amount: Number(entry.amount), description: entry.description || `Credit card ${entry.activity_type}`, created_at: entry.created_at })),
   ].sort((a, b) => `${b.date} ${b.created_at}`.localeCompare(`${a.date} ${a.created_at}`)).slice(0, 8);
+
+  const recurringRuleMap = new Map((recurringRules ?? []).map((rule) => [rule.id, rule]));
+  const recurringSoon = (recurringOccurrences ?? []).map((occurrence) => ({ ...occurrence, rule: recurringRuleMap.get(occurrence.recurring_rule_id) })).filter((entry) => entry.rule);
 
   return (
     <main className="main">
@@ -95,6 +108,15 @@ export default async function DashboardPage() {
           })}</div>}
         </div>
       </section>
+
+      {recurringSoon.length > 0 && <section className="panel recurring-dashboard-panel">
+        <div className="section-heading"><div><h3>Due & upcoming</h3><p className="muted">Recurring items due today or within the next 7 days.</p></div><Link className="text-btn" href="/recurring">Open recurring</Link></div>
+        <div className="dashboard-recurring-list">{recurringSoon.map((entry) => {
+          const rule = entry.rule!;
+          const due = entry.due_date <= today;
+          return <Link href="/recurring" className={`dashboard-recurring-row ${due ? "is-due" : ""}`} key={entry.id}><div><strong>{rule.name}</strong><span>{due ? (entry.due_date < today ? "Overdue" : "Due today") : `Due ${entry.due_date}`} · {rule.auto_post ? "Auto-post" : "Manual"}</span></div><strong>{money(entry.amount)}</strong></Link>;
+        })}</div>
+      </section>}
 
       <section className="panel recent-panel">
         <div className="section-heading"><div><h3>Recent activity</h3><p className="muted">Your latest money movements.</p></div><Link className="text-btn" href="/transactions">View all</Link></div>
