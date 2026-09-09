@@ -30,11 +30,17 @@ export type LoanFundingRow = {
   record_initial_cash?: boolean | null;
 };
 
+export type LoanRelationRow = {
+  loan_type?: string | null;
+};
+
 export type LoanPaymentRow = {
   account_id: string | null;
   principal_amount: number | string;
   interest_amount: number | string;
-  loans?: { loan_type?: string | null } | null;
+  // Supabase can infer embedded relations as either a single object or an array
+  // depending on the generated relationship metadata, so accept both shapes.
+  loans?: LoanRelationRow | LoanRelationRow[] | null;
   loan_type?: string | null;
 };
 
@@ -84,7 +90,8 @@ export function accountBalance(
   for (const payment of loanPayments) {
     if (payment.account_id !== account.id) continue;
     const amount = Number(payment.principal_amount) + Number(payment.interest_amount);
-    const loanType = payment.loan_type ?? payment.loans?.loan_type ?? "";
+    const relation = Array.isArray(payment.loans) ? payment.loans[0] : payment.loans;
+    const loanType = payment.loan_type ?? relation?.loan_type ?? "";
     if (loanType === "borrowed") balance -= amount;
     if (loanType === "lent") balance += amount;
   }
