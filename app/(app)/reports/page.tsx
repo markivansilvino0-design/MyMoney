@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { money } from "@/lib/money";
 import { savingsGoalImpact } from "@/lib/finance";
@@ -175,6 +176,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Para
     <main className="main">
       <div className="page-heading">
         <div><div className="eyebrow">Analyze</div><h2>Reports</h2><p>Understand income, spending, loan interest, and how much you kept.</p></div>
+        <div className="heading-actions"><Link className="secondary-btn" href="/credit-cards/reports">Credit Card Reports</Link></div>
       </div>
 
       <section className="panel report-filter-panel">
