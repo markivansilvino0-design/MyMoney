@@ -42,6 +42,7 @@ export default async function CreditCardsPage({ searchParams }: { searchParams: 
     <main className="main">
       <div className="page-heading">
         <div><div className="eyebrow">Borrowing</div><h2>Credit Cards</h2><p>Track card purchases, payments, installments, statement cycles, and outstanding balances.</p></div>
+        <div className="heading-actions"><Link className="secondary-btn" href="/credit-cards/reports">Credit Card Reports</Link></div>
       </div>
 
       {notices.error && <div className="notice error page-notice">{notices.error}</div>}
