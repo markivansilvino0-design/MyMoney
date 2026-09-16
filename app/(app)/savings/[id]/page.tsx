@@ -24,14 +24,15 @@ export default async function SavingsGoalDetailPage({ params, searchParams }: {
   const supabase = await createClient();
 
   const [{ data: goal }, { data: contributions }, { data: accounts }] = await Promise.all([
-    supabase.from("savings_goals").select("id,name,target_amount,current_amount,target_date,status,notes,created_at").eq("id", id).maybeSingle(),
+    supabase.from("savings_goals").select("id,name,target_amount,current_amount,target_date,status,notes,created_at,goal_type,default_account_id,default_saving_mode").eq("id", id).maybeSingle(),
     supabase.from("savings_contributions").select("id,contribution_date,entry_type,saving_mode,from_account_id,to_account_id,amount,description,notes,created_at").eq("savings_goal_id", id).order("contribution_date", { ascending: false }).order("created_at", { ascending: false }).limit(300),
-    supabase.from("accounts").select("id,name"),
+    supabase.from("accounts").select("id,name,is_active").order("is_active", { ascending: false }).order("name"),
   ]);
 
   if (!goal) notFound();
   const rows = contributions ?? [];
-  const accountMap = new Map((accounts ?? []).map((account) => [account.id, account.name]));
+  const accountRows = accounts ?? [];
+  const accountMap = new Map(accountRows.map((account) => [account.id, account.name]));
   const target = Number(goal.target_amount);
   const current = Number(goal.current_amount);
   const remaining = Math.max(target - current, 0);
@@ -43,22 +44,23 @@ export default async function SavingsGoalDetailPage({ params, searchParams }: {
   const monthlyRequired = months ? remaining / months : null;
   const deposits = rows.filter((row) => row.entry_type !== "withdrawal").reduce((sum, row) => sum + Number(row.amount), 0);
   const withdrawals = rows.filter((row) => row.entry_type === "withdrawal").reduce((sum, row) => sum + Number(row.amount), 0);
+  const defaultAccountName = goal.default_account_id ? accountMap.get(goal.default_account_id) ?? "Account" : "Choose per entry";
 
   return (
     <main className="main">
       <div className="page-heading">
-        <div><Link href="/savings" className="back-link">← Savings</Link><h2>{goal.name}</h2><p>{goal.status.charAt(0).toUpperCase() + goal.status.slice(1)} goal</p></div>
+        <div><Link href="/savings" className="back-link">← Savings</Link><h2>{goal.name}</h2><p>{goal.goal_type === "sinking" ? "Sinking fund" : "Savings goal"} · {goal.status.charAt(0).toUpperCase() + goal.status.slice(1)}</p></div>
         {goal.status === "active" && <div className="heading-actions"><Link className="secondary-btn" href={`/transactions?prefill=savings&goal=${goal.id}&savings_action=withdrawal`}>Withdraw</Link><Link className="primary-btn" href={`/transactions?prefill=savings&goal=${goal.id}`}>+ Add savings</Link></div>}
       </div>
 
       {notices.error && <div className="notice error page-notice">{notices.error}</div>}
       {notices.success && <div className="notice success page-notice">{notices.success}</div>}
 
-      <section className="detail-summary">
+      <section className="detail-summary savings-detail-summary">
         <div className="stat-card"><div className="stat-label">Saved</div><div className="detail-value positive">{money(current)}</div></div>
         <div className="stat-card"><div className="stat-label">Remaining</div><div className="detail-value">{money(remaining)}</div></div>
-        <div className="stat-card"><div className="stat-label">Progress</div><div className="detail-value">{pct.toFixed(1)}%</div></div>
-        <div className="stat-card"><div className="stat-label">Target date</div><div className="detail-value">{goal.target_date ?? "No date"}</div></div>
+        <div className="stat-card"><div className="stat-label">Default account</div><div className="detail-value savings-account-value">{defaultAccountName}</div></div>
+        <div className="stat-card"><div className="stat-label">Monthly needed</div><div className="detail-value">{monthlyRequired === null ? "—" : money(monthlyRequired)}</div></div>
       </section>
 
       <section className="panel" style={{ marginTop: 16 }}>
@@ -67,6 +69,7 @@ export default async function SavingsGoalDetailPage({ params, searchParams }: {
         <div className="goal-metrics">
           <div><span className="muted">Deposits</span><strong>{money(deposits)}</strong></div>
           <div><span className="muted">Withdrawals</span><strong>{money(withdrawals)}</strong></div>
+          <div><span className="muted">Default method</span><strong>{goal.default_saving_mode === "transfer" ? "Transfer" : "Earmark"}</strong></div>
           <div><span className="muted">Days remaining</span><strong>{days === null ? "—" : Math.max(days, 0)}</strong></div>
           <div><span className="muted">Weekly needed</span><strong>{weeklyRequired === null ? "—" : money(weeklyRequired)}</strong></div>
           <div><span className="muted">Monthly needed</span><strong>{monthlyRequired === null ? "—" : money(monthlyRequired)}</strong></div>
@@ -75,7 +78,7 @@ export default async function SavingsGoalDetailPage({ params, searchParams }: {
       </section>
 
       <section className="panel" style={{ marginTop: 16 }}>
-        <div className="section-heading"><div><h3>Savings history</h3><p className="muted">Deposits increase the goal; withdrawals reduce it. Earmarks do not move the real account balance.</p></div><strong>{rows.length} entries</strong></div>
+        <div className="section-heading"><div><h3>Savings history</h3><p className="muted">Deposits increase the goal; withdrawals reduce it. Earmarks reserve money without moving the real account balance.</p></div><strong>{rows.length} entries</strong></div>
         {rows.length === 0 ? <div className="empty">No savings activity yet.</div> : (
           <div className="table-wrap"><table><thead><tr><th>Date</th><th>Description</th><th>Action</th><th>Mode</th><th>Account movement</th><th>Amount</th></tr></thead><tbody>{rows.map((row) => {
             const from = accountMap.get(row.from_account_id ?? "") ?? "—";
@@ -88,12 +91,15 @@ export default async function SavingsGoalDetailPage({ params, searchParams }: {
       </section>
 
       <section className="panel" style={{ marginTop: 16 }}>
-        <div className="section-heading"><div><h3>Edit goal</h3><p className="muted">Paused goals stay visible but are not offered for new contributions. Archived goals move out of the main list.</p></div></div>
-        <form action={updateSavingsGoal} className="form-grid compact-form">
+        <div className="section-heading"><div><h3>Edit goal</h3><p className="muted">Choose where the goal normally lives and whether new savings should be earmarked or transferred.</p></div></div>
+        <form action={updateSavingsGoal} className="form-grid compact-form savings-goal-form">
           <input type="hidden" name="id" value={goal.id} />
           <div className="field"><label htmlFor="name">Goal name</label><input id="name" name="name" defaultValue={goal.name} required /></div>
+          <div className="field"><label htmlFor="goal_type">Goal type</label><select id="goal_type" name="goal_type" defaultValue={goal.goal_type}><option value="standard">Standard savings goal</option><option value="sinking">Sinking fund</option></select></div>
           <div className="field"><label htmlFor="target_amount">Target amount</label><input id="target_amount" name="target_amount" type="number" min="0.01" step="0.01" defaultValue={target} required /></div>
           <div className="field"><label htmlFor="target_date">Target date</label><input id="target_date" name="target_date" type="date" defaultValue={goal.target_date ?? ""} /></div>
+          <div className="field"><label htmlFor="default_account_id">Default savings account</label><select id="default_account_id" name="default_account_id" defaultValue={goal.default_account_id ?? ""}><option value="">Choose per entry</option>{accountRows.map((account) => <option key={account.id} value={account.id}>{account.name}{account.is_active ? "" : " (inactive)"}</option>)}</select></div>
+          <div className="field"><label htmlFor="default_saving_mode">Default method</label><select id="default_saving_mode" name="default_saving_mode" defaultValue={goal.default_saving_mode}><option value="earmark">Earmark</option><option value="transfer">Transfer</option></select></div>
           <div className="field"><label htmlFor="status">Status</label><select id="status" name="status" defaultValue={goal.status}><option value="active">Active</option><option value="paused">Paused</option><option value="completed">Completed</option><option value="archived">Archived</option></select></div>
           <div className="field"><label htmlFor="notes">Notes</label><input id="notes" name="notes" defaultValue={goal.notes ?? ""} /></div>
           <div className="filter-actions"><button className="primary-btn" type="submit">Save goal</button></div>

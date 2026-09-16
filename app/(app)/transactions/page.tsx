@@ -38,7 +38,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
     supabase.from("accounts").select("id,name,account_type,is_active").order("is_active", { ascending: false }).order("name"),
     supabase.from("categories").select("id,name,category_type").eq("is_active", true).order("category_type").order("name"),
     supabase.from("owners").select("id,name,is_default").eq("is_active", true).order("is_default", { ascending: false }).order("name"),
-    supabase.from("savings_goals").select("id,name,target_amount,current_amount,status").order("name"),
+    supabase.from("savings_goals").select("id,name,target_amount,current_amount,status,default_account_id,default_saving_mode").order("name"),
     supabase.from("credit_cards").select("id,name").order("name"),
   ]);
 

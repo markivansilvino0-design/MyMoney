@@ -59,14 +59,15 @@ export async function renameCategory(formData: FormData) {
   if (!current) back("error", "Category not found.");
 
   if (current.category_type !== categoryType) {
-    const [transactions, budgets, cardActivity, installments, recurring] = await Promise.all([
+    const [transactions, budgets, cardActivity, installments, recurring, templateItems] = await Promise.all([
       supabase.from("transactions").select("id", { count: "exact", head: true }).eq("category_id", id),
       supabase.from("budgets").select("id", { count: "exact", head: true }).eq("category_id", id),
       supabase.from("credit_card_transactions").select("id", { count: "exact", head: true }).eq("category_id", id),
       supabase.from("credit_card_installments").select("id", { count: "exact", head: true }).eq("category_id", id),
       supabase.from("recurring_rules").select("id", { count: "exact", head: true }).eq("category_id", id),
+      supabase.from("budget_template_items").select("id", { count: "exact", head: true }).eq("category_id", id),
     ]);
-    const used = [transactions, budgets, cardActivity, installments, recurring].some((result) => (result.count ?? 0) > 0);
+    const used = [transactions, budgets, cardActivity, installments, recurring, templateItems].some((result) => (result.count ?? 0) > 0);
     if (used) back("error", "A category already used by financial records cannot be changed between Income and Expense. Rename or deactivate it instead.");
   }
 
@@ -91,15 +92,16 @@ export async function deleteCategory(formData: FormData) {
   const id = text(formData, "id");
   if (!id) back("error", "Missing category.");
 
-  const [transactions, budgets, cardActivity, installments, recurring] = await Promise.all([
+  const [transactions, budgets, cardActivity, installments, recurring, templateItems] = await Promise.all([
     supabase.from("transactions").select("id", { count: "exact", head: true }).eq("category_id", id),
     supabase.from("budgets").select("id", { count: "exact", head: true }).eq("category_id", id),
     supabase.from("credit_card_transactions").select("id", { count: "exact", head: true }).eq("category_id", id),
     supabase.from("credit_card_installments").select("id", { count: "exact", head: true }).eq("category_id", id),
     supabase.from("recurring_rules").select("id", { count: "exact", head: true }).eq("category_id", id),
+    supabase.from("budget_template_items").select("id", { count: "exact", head: true }).eq("category_id", id),
   ]);
 
-  const used = [transactions, budgets, cardActivity, installments, recurring].some((result) => (result.count ?? 0) > 0);
+  const used = [transactions, budgets, cardActivity, installments, recurring, templateItems].some((result) => (result.count ?? 0) > 0);
   if (used) back("error", "This category is already used by financial records. Deactivate it instead so historical reports stay intact.");
 
   const { error } = await supabase.from("categories").delete().eq("id", id);
@@ -171,13 +173,15 @@ export async function deleteOwner(formData: FormData) {
   if (!owner) back("error", "Owner not found.");
   if (owner.is_default) back("error", "The default owner cannot be deleted. Set another owner as default first.");
 
-  const [transactions, cardActivity, installments, recurring] = await Promise.all([
+  const [transactions, cardActivity, installments, recurring, budgets, templates] = await Promise.all([
     supabase.from("transactions").select("id", { count: "exact", head: true }).eq("owner_id", id),
     supabase.from("credit_card_transactions").select("id", { count: "exact", head: true }).eq("owner_id", id),
     supabase.from("credit_card_installments").select("id", { count: "exact", head: true }).eq("owner_id", id),
     supabase.from("recurring_rules").select("id", { count: "exact", head: true }).eq("owner_id", id),
+    supabase.from("budgets").select("id", { count: "exact", head: true }).eq("owner_id", id),
+    supabase.from("budget_templates").select("id", { count: "exact", head: true }).eq("owner_id", id),
   ]);
-  const used = [transactions, cardActivity, installments, recurring].some((result) => (result.count ?? 0) > 0);
+  const used = [transactions, cardActivity, installments, recurring, budgets, templates].some((result) => (result.count ?? 0) > 0);
   if (used) back("error", "This owner is already used by financial records. Deactivate it instead so historical reports stay intact.");
 
   const { error } = await supabase.from("owners").delete().eq("id", id);
