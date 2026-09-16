@@ -8,11 +8,18 @@ import { createMoneyEntry, updateMoneyEntry } from "@/app/(app)/transactions/act
 type Account = { id: string; name: string; account_type: string; is_active?: boolean };
 type Category = { id: string; name: string; category_type: "income" | "expense" };
 type Owner = { id: string; name: string; is_default: boolean };
-type Goal = { id: string; name: string; target_amount: number; current_amount: number; status?: string };
+type Goal = {
+  id: string;
+  name: string;
+  target_amount: number;
+  current_amount: number;
+  status?: string;
+  default_account_id?: string | null;
+  default_saving_mode?: "earmark" | "transfer" | null;
+};
 type EntryType = "income" | "expense" | "transfer" | "savings";
 type SavingsEntryType = "deposit" | "withdrawal";
 type SavingMode = "earmark" | "transfer";
-
 
 function TransactionSubmitButton({ isEdit, disabled }: { isEdit: boolean; disabled: boolean }) {
   const { pending } = useFormStatus();
@@ -63,9 +70,30 @@ export function TransactionForm({
   defaultGoalId?: string;
   defaultSavingsEntryType?: SavingsEntryType;
 }) {
-  const [type, setType] = useState<EntryType>(initial?.transaction_type ?? defaultType ?? "expense");
-  const [savingsEntryType, setSavingsEntryType] = useState<SavingsEntryType>(initial?.savings_entry_type ?? defaultSavingsEntryType ?? "deposit");
-  const [savingMode, setSavingMode] = useState<SavingMode>(initial?.saving_mode ?? "earmark");
+  const initialTransactionType = initial?.transaction_type ?? defaultType ?? "expense";
+  const initialGoalId = initial?.savings_goal_id ?? defaultGoalId ?? goals[0]?.id ?? "";
+  const initialGoal = goals.find((goal) => goal.id === initialGoalId);
+  const initialSavingsAction = initial?.savings_entry_type ?? defaultSavingsEntryType ?? "deposit";
+  const initialMode = initial?.saving_mode ?? initialGoal?.default_saving_mode ?? "earmark";
+  const fallbackFirst = initial?.account_id ?? accounts[0]?.id ?? "";
+  const goalAccount = !initial && initialTransactionType === "savings" ? initialGoal?.default_account_id ?? "" : "";
+  const initialFrom = initial?.account_id ?? (
+    initialMode === "earmark" && goalAccount ? goalAccount
+      : initialMode === "transfer" && initialSavingsAction === "withdrawal" && goalAccount ? goalAccount
+      : accounts.find((account) => account.id !== goalAccount)?.id ?? fallbackFirst
+  );
+  const initialTo = initial?.to_account_id ?? (
+    initialMode === "transfer" && initialSavingsAction === "deposit" && goalAccount ? goalAccount
+      : accounts.find((account) => account.id !== initialFrom)?.id ?? ""
+  );
+
+  const [type, setType] = useState<EntryType>(initialTransactionType);
+  const [savingsEntryType, setSavingsEntryType] = useState<SavingsEntryType>(initialSavingsAction);
+  const [savingMode, setSavingMode] = useState<SavingMode>(initialMode as SavingMode);
+  const [selectedGoalId, setSelectedGoalId] = useState(initialGoalId);
+  const [accountId, setAccountId] = useState(initialFrom);
+  const [toAccountId, setToAccountId] = useState(initialTo);
+
   const filteredCategories = useMemo(
     () => categories.filter((category) => category.category_type === (type === "income" ? "income" : "expense")),
     [categories, type],
@@ -79,9 +107,27 @@ export function TransactionForm({
   const defaultCategory = filteredCategories.some((category) => category.id === initial?.category_id)
     ? initial?.category_id ?? ""
     : filteredCategories[0]?.id ?? "";
-  const selectedGoal = initial?.savings_goal_id ?? defaultGoalId ?? goals[0]?.id ?? "";
-  const firstAccount = initial?.account_id ?? accounts[0]?.id ?? "";
-  const secondAccount = initial?.to_account_id ?? accounts.find((account) => account.id !== firstAccount)?.id ?? "";
+
+  function applyGoalDefaults(goalId: string, modeOverride?: SavingMode, actionOverride?: SavingsEntryType) {
+    const goal = goals.find((item) => item.id === goalId);
+    if (!goal || isEdit) return;
+    const mode = modeOverride ?? goal.default_saving_mode ?? "earmark";
+    const savingsAction = actionOverride ?? savingsEntryType;
+    setSavingMode(mode);
+    const targetAccount = goal.default_account_id ?? "";
+    if (!targetAccount) return;
+    if (mode === "earmark") {
+      setAccountId(targetAccount);
+      return;
+    }
+    if (savingsAction === "deposit") {
+      setToAccountId(targetAccount);
+      if (accountId === targetAccount || !accountId) setAccountId(accounts.find((account) => account.id !== targetAccount)?.id ?? "");
+    } else {
+      setAccountId(targetAccount);
+      if (toAccountId === targetAccount || !toAccountId) setToAccountId(accounts.find((account) => account.id !== targetAccount)?.id ?? "");
+    }
+  }
 
   return (
     <form action={action} className="transaction-form">
@@ -96,7 +142,7 @@ export function TransactionForm({
             ["transfer", "Transfer", "↔"],
             ["savings", "Savings", "◎"],
           ] as const).filter(([value]) => value !== "savings" || !initial || initial.kind === "sv").map(([value, label, icon]) => (
-            <button key={value} type="button" className={`type-tab ${type === value ? "active" : ""} type-tab-${value}`} onClick={() => setType(value)} disabled={initial?.kind === "sv"}>
+            <button key={value} type="button" className={`type-tab ${type === value ? "active" : ""} type-tab-${value}`} onClick={() => { setType(value); if (value === "savings") applyGoalDefaults(selectedGoalId); }} disabled={initial?.kind === "sv"}>
               <span>{icon}</span>{label}
             </button>
           ))}
@@ -119,14 +165,22 @@ export function TransactionForm({
           <>
             <div className="field">
               <label htmlFor="savings_entry_type">Savings action</label>
-              <select id="savings_entry_type" name="savings_entry_type" value={savingsEntryType} onChange={(event) => setSavingsEntryType(event.target.value as SavingsEntryType)}>
+              <select id="savings_entry_type" name="savings_entry_type" value={savingsEntryType} onChange={(event) => {
+                const next = event.target.value as SavingsEntryType;
+                setSavingsEntryType(next);
+                applyGoalDefaults(selectedGoalId, savingMode, next);
+              }}>
                 <option value="deposit">Deposit / Add to goal</option>
                 <option value="withdrawal">Withdrawal / Reduce goal</option>
               </select>
             </div>
             <div className="field">
               <label htmlFor="saving_mode">How is the money handled?</label>
-              <select id="saving_mode" name="saving_mode" value={savingMode} onChange={(event) => setSavingMode(event.target.value as SavingMode)}>
+              <select id="saving_mode" name="saving_mode" value={savingMode} onChange={(event) => {
+                const next = event.target.value as SavingMode;
+                setSavingMode(next);
+                applyGoalDefaults(selectedGoalId, next, savingsEntryType);
+              }}>
                 <option value="earmark">Earmark only — money stays in the same account</option>
                 <option value="transfer">Transfer — money physically moves between accounts</option>
               </select>
@@ -138,7 +192,7 @@ export function TransactionForm({
           <label htmlFor="account_id">
             {type === "income" ? "Deposit to account" : type === "expense" ? "Pay from account" : type === "transfer" ? "From account" : savingMode === "earmark" ? "Account holding this money" : savingsEntryType === "withdrawal" ? "From savings account" : "From account"}
           </label>
-          <select id="account_id" name="account_id" defaultValue={firstAccount} required>
+          <select id="account_id" name="account_id" value={accountId} onChange={(event) => setAccountId(event.target.value)} required>
             <option value="" disabled>Select account</option>
             {accounts.map((account) => <option key={account.id} value={account.id}>{account.name}{account.is_active === false ? " (inactive)" : ""}</option>)}
           </select>
@@ -147,7 +201,7 @@ export function TransactionForm({
         {(type === "transfer" || (type === "savings" && savingMode === "transfer")) && (
           <div className="field">
             <label htmlFor="to_account_id">{type === "savings" && savingsEntryType === "deposit" ? "To savings account" : "To account"}</label>
-            <select id="to_account_id" name="to_account_id" defaultValue={secondAccount} required>
+            <select id="to_account_id" name="to_account_id" value={toAccountId} onChange={(event) => setToAccountId(event.target.value)} required>
               <option value="" disabled>Select destination</option>
               {accounts.map((account) => <option key={account.id} value={account.id}>{account.name}{account.is_active === false ? " (inactive)" : ""}</option>)}
             </select>
@@ -176,7 +230,11 @@ export function TransactionForm({
         {type === "savings" && (
           <div className="field">
             <label htmlFor="savings_goal_id">Savings goal</label>
-            <select id="savings_goal_id" name="savings_goal_id" defaultValue={selectedGoal} required>
+            <select id="savings_goal_id" name="savings_goal_id" value={selectedGoalId} onChange={(event) => {
+              const next = event.target.value;
+              setSelectedGoalId(next);
+              applyGoalDefaults(next);
+            }} required>
               <option value="" disabled>{goals.length ? "Select savings goal" : "No active savings goals"}</option>
               {goals.map((goal) => <option key={goal.id} value={goal.id}>{goal.name}</option>)}
             </select>
@@ -201,8 +259,8 @@ export function TransactionForm({
         <textarea id="notes" name="notes" rows={3} defaultValue={initial?.notes ?? ""} placeholder="Add any details you want to remember." />
       </div>
 
-      {type === "savings" && savingMode === "earmark" && <div className="notice info">Earmark mode changes your savings goal and Available amount, but does not change the real balance of the selected account.</div>}
-      {type === "savings" && savingMode === "transfer" && <div className="notice info">Transfer mode changes your savings goal and also moves the same amount between the two selected accounts.</div>}
+      {type === "savings" && savingMode === "earmark" && <div className="notice info">Earmark mode reserves part of the selected account for this goal without changing the account's real balance.</div>}
+      {type === "savings" && savingMode === "transfer" && <div className="notice info">Transfer mode moves money between your accounts and also updates the savings goal. A goal's default account is automatically suggested.</div>}
       {noAccounts && <div className="notice error">No accounts are available. Add an account first.</div>}
       {savingsUnavailable && <div className="notice error">You do not have an active savings goal. <Link href="/savings"><strong>Create or reactivate a savings goal</strong></Link> first.</div>}
       {transferUnavailable && <div className="notice error">This transfer needs at least two accounts. <Link href="/accounts"><strong>Add another account</strong></Link> first.</div>}
