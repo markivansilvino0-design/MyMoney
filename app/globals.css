@@ -1020,3 +1020,34 @@ tbody tr:hover td { background: #fafcff; }
   .savings-notes-field { grid-column: auto; }
   .budget-template-row { align-items: flex-start; flex-direction: column; }
 }
+
+/* Phase 9.3 — Credit Card Reports */
+.cc-report-filter-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)) auto; gap: 10px; align-items: end; }
+.cc-report-stats { margin-top: 14px; }
+.cc-report-balance-note { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-top: 14px; }
+.cc-report-balance-note > div { display: grid; gap: 4px; }
+.cc-report-balance-note > div strong { font-size: 12px; }
+.cc-report-balance-note > div span { font-size: 10px; }
+.cc-report-balance-note > strong { font-size: 19px; white-space: nowrap; }
+.cc-payment-bar { background: linear-gradient(90deg, #0f9f6e, #43c79a); }
+.cc-report-card-meta { margin-top: 3px; font-size: 9px; font-weight: 500; }
+.cc-report-cycle { display: grid; gap: 2px; white-space: nowrap; }
+.cc-report-cycle small { color: var(--muted); font-size: 9px; }
+.cc-card-comparison { display: grid; gap: 8px; }
+.cc-card-comparison-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 13px; border: 1px solid var(--border); border-radius: 13px; background: #fbfcfe; }
+.cc-card-comparison-row > div:first-child { display: grid; gap: 3px; min-width: 0; }
+.cc-card-comparison-row > div:first-child strong { font-size: 11px; }
+.cc-card-comparison-row > div:first-child span { font-size: 9px; }
+.cc-comparison-values { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px 18px; color: var(--muted); font-size: 9px; }
+.cc-comparison-values strong { margin-left: 4px; color: var(--text); font-size: 10px; }
+.cc-report-limit-note { margin: 12px 2px 0; font-size: 9.5px; }
+
+@media (max-width: 1180px) {
+  .cc-report-filter-grid { grid-template-columns: repeat(3, minmax(0,1fr)); }
+}
+@media (max-width: 700px) {
+  .cc-report-filter-grid { grid-template-columns: 1fr; }
+  .cc-report-balance-note { align-items: flex-start; flex-direction: column; }
+  .cc-card-comparison-row { grid-template-columns: 1fr; }
+  .cc-comparison-values { justify-content: flex-start; }
+}
