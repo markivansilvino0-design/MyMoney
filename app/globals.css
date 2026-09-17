@@ -1051,3 +1051,12 @@ tbody tr:hover td { background: #fafcff; }
   .cc-card-comparison-row { grid-template-columns: 1fr; }
   .cc-comparison-values { justify-content: flex-start; }
 }
+
+/* Phase 9.3.1 — Credit Card Payment Ownership */
+.cc-payment-owner-form { display: inline-flex; align-items: center; gap: 6px; min-width: 170px; }
+.cc-payment-owner-form select { min-width: 110px; padding: 6px 8px; font-size: 9px; }
+.cc-payment-owner-form .text-btn { white-space: nowrap; font-size: 9px; }
+@media (max-width: 700px) {
+  .cc-payment-owner-form { min-width: 0; align-items: stretch; flex-direction: column; }
+  .cc-payment-owner-form select { min-width: 0; }
+}
