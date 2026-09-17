@@ -175,6 +175,7 @@ export default async function CreditCardReportsPage({ searchParams }: { searchPa
   const byCategory = new Map<string, number>();
   const byOwner = new Map<string, number>();
   const byPaymentAccount = new Map<string, number>();
+  const byPaymentOwner = new Map<string, number>();
   const byNeedWant = new Map<string, number>();
   const monthly = new Map<string, { spend: number; payments: number; refunds: number }>();
 
@@ -209,6 +210,8 @@ export default async function CreditCardReportsPage({ searchParams }: { searchPa
     if (row.activity_type === "payment") {
       const account = row.account_id ? accountMap.get(row.account_id) ?? "Unknown account" : "No payment account";
       byPaymentAccount.set(account, (byPaymentAccount.get(account) ?? 0) + Number(row.amount));
+      const paymentOwner = row.owner_id ? ownerMap.get(row.owner_id) ?? "Unassigned" : "Unassigned";
+      byPaymentOwner.set(paymentOwner, (byPaymentOwner.get(paymentOwner) ?? 0) + Number(row.amount));
     }
   }
 
@@ -216,12 +219,14 @@ export default async function CreditCardReportsPage({ searchParams }: { searchPa
   const categoryRows = [...byCategory.entries()].filter(([, value]) => value !== 0).sort((a, b) => b[1] - a[1]);
   const ownerRows = [...byOwner.entries()].filter(([, value]) => value !== 0).sort((a, b) => b[1] - a[1]);
   const paymentAccountRows = [...byPaymentAccount.entries()].sort((a, b) => b[1] - a[1]);
+  const paymentOwnerRows = [...byPaymentOwner.entries()].sort((a, b) => b[1] - a[1]);
   const needWantRows = [...byNeedWant.entries()].filter(([, value]) => value !== 0).sort((a, b) => b[1] - a[1]);
   const monthRows = [...monthly.entries()].sort(([a], [b]) => a.localeCompare(b));
 
   const maxCategory = Math.max(...categoryRows.map(([, value]) => Math.abs(value)), 1);
   const maxOwner = Math.max(...ownerRows.map(([, value]) => Math.abs(value)), 1);
   const maxPayment = Math.max(...paymentAccountRows.map(([, value]) => value), 1);
+  const maxPaymentOwner = Math.max(...paymentOwnerRows.map(([, value]) => value), 1);
   const maxMonth = Math.max(...monthRows.flatMap(([, value]) => [Math.max(value.spend, 0), value.payments, value.refunds]), 1);
 
   return (
@@ -230,7 +235,7 @@ export default async function CreditCardReportsPage({ searchParams }: { searchPa
         <div>
           <div className="eyebrow">Analyze borrowing</div>
           <h2>Credit Card Reports</h2>
-          <p>Review card spending, payments, refunds, utilization, fees, owners, categories, and installment commitments.</p>
+          <p>Review card spending, payments, refunds, utilization, fees, expense owners, payment owners, categories, and installment commitments.</p>
         </div>
         <div className="heading-actions">
           <Link className="secondary-btn" href="/reports">All reports</Link>
@@ -243,7 +248,7 @@ export default async function CreditCardReportsPage({ searchParams }: { searchPa
           <div className="field"><label htmlFor="from">From</label><input id="from" name="from" type="date" defaultValue={from} /></div>
           <div className="field"><label htmlFor="to">To</label><input id="to" name="to" type="date" defaultValue={to} /></div>
           <div className="field"><label htmlFor="card">Credit card</label><select id="card" name="card" defaultValue={params.card ?? ""}><option value="">All cards</option>{cardRows.map((row) => <option key={row.id} value={row.id}>{row.name}{row.is_active ? "" : " (Inactive)"}</option>)}</select></div>
-          <div className="field"><label htmlFor="owner">Owner</label><select id="owner" name="owner" defaultValue={params.owner ?? ""}><option value="">All owners</option>{(owners ?? []).map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></div>
+          <div className="field"><label htmlFor="owner">Owner / Paid by</label><select id="owner" name="owner" defaultValue={params.owner ?? ""}><option value="">All owners</option>{(owners ?? []).map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></div>
           <div className="field"><label htmlFor="category">Category</label><select id="category" name="category" defaultValue={params.category ?? ""}><option value="">All categories</option>{(categories ?? []).filter((row) => row.category_type === "expense").map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></div>
           <div className="field"><label htmlFor="type">Activity</label><select id="type" name="type" defaultValue={params.type ?? ""}><option value="">All activity</option><option value="purchase">Purchases</option><option value="payment">Payments</option><option value="refund">Refunds</option><option value="fee">Fees</option><option value="interest">Interest</option></select></div>
           <div className="filter-actions"><button className="primary-btn" type="submit">Apply report</button><a className="text-btn" href="/credit-cards/reports">Reset</a></div>
@@ -293,6 +298,11 @@ export default async function CreditCardReportsPage({ searchParams }: { searchPa
           {paymentAccountRows.length === 0 ? <div className="empty compact-empty">No card payments in this period.</div> : <div className="bar-list">{paymentAccountRows.map(([label, value]) => <div className="bar-list-row" key={label}><div className="bar-list-meta"><span>{label}</span><strong>{money(value)}</strong></div><div className="mini-track"><div className="mini-bar cc-payment-bar" style={{ width: `${(value / maxPayment) * 100}%` }} /></div></div>)}</div>}
         </div>
 
+        <div className="panel report-card">
+          <div className="section-heading"><div><h3>Payments by owner</h3><p className="muted">Who funded each credit-card payment. This does not create or reassign an expense.</p></div></div>
+          {paymentOwnerRows.length === 0 ? <div className="empty compact-empty">No card payments in this period.</div> : <div className="bar-list">{paymentOwnerRows.map(([label, value]) => <div className="bar-list-row" key={label}><div className="bar-list-meta"><span>{label}</span><strong>{money(value)}</strong></div><div className="mini-track"><div className="mini-bar cc-payment-bar" style={{ width: `${(value / maxPaymentOwner) * 100}%` }} /></div></div>)}</div>}
+        </div>
+
         <div className="panel report-card span-2">
           <div className="section-heading"><div><h3>Card exposure</h3><p className="muted">Outstanding balance, available credit, utilization, period activity, and the relevant statement cycle as of the report end date.</p></div></div>
           {cardSummaries.length === 0 ? <div className="empty">No credit cards yet.</div> : <div className="table-wrap"><table><thead><tr><th>Card</th><th>Outstanding</th><th>Limit</th><th>Available</th><th>Utilization</th><th>Period spend</th><th>Payments</th><th>Fees + interest</th><th>Statement / Due</th></tr></thead><tbody>{cardSummaries.map((card) => <tr key={card.id}><td><Link href={`/credit-cards/${card.id}`}><strong>{card.name}</strong><div className="muted cc-report-card-meta">{card.issuer || "Credit card"}{card.last4 ? ` · •••• ${card.last4}` : ""}{card.is_active ? "" : " · Inactive"}</div></Link></td><td className="amount-cell negative">{money(Math.max(card.balance, 0))}</td><td className="amount-cell">{money(Number(card.credit_limit))}</td><td className="amount-cell positive">{money(card.available)}</td><td>{percent(card.utilization)}</td><td className="amount-cell">{money(card.spend)}</td><td className="amount-cell positive">{money(card.paid)}</td><td className="amount-cell">{money(card.feesAndInterest)}</td><td><span className="cc-report-cycle">{card.cycle.end}<small>Due {card.cycle.dueDate}</small></span></td></tr>)}</tbody></table></div>}
@@ -310,7 +320,7 @@ export default async function CreditCardReportsPage({ searchParams }: { searchPa
 
         <div className="panel report-card span-2">
           <div className="section-heading"><div><h3>Activity detail</h3><p className="muted">Posted and scheduled card activity inside the selected report period.</p></div><strong>{activityRows.length} entries</strong></div>
-          {activityRows.length === 0 ? <div className="empty">No card activity in this period.</div> : <div className="table-wrap"><table><thead><tr><th>Date</th><th>Card</th><th>Description</th><th>Type</th><th>Category / Account</th><th>Owner</th><th>Classification</th><th>Balance impact</th></tr></thead><tbody>{activityRows.slice(0, 100).map((row) => {
+          {activityRows.length === 0 ? <div className="empty">No card activity in this period.</div> : <div className="table-wrap"><table><thead><tr><th>Date</th><th>Card</th><th>Description</th><th>Type</th><th>Category / Account</th><th>Owner / Paid by</th><th>Classification</th><th>Balance impact</th></tr></thead><tbody>{activityRows.slice(0, 100).map((row) => {
             const impact = creditCardImpact(row.activity_type, row.amount);
             const secondary = row.activity_type === "payment" ? accountMap.get(row.account_id ?? "") ?? "Payment account" : categoryMap.get(row.category_id ?? "") ?? "Uncategorized";
             const classification = row.activity_type === "payment" ? "—" : [row.need_want === "need" ? "Need" : row.need_want === "want" ? "Want" : null, row.fixed_variable === "fixed" ? "Fixed" : row.fixed_variable === "variable" ? "Variable" : null].filter(Boolean).join(" · ") || "—";

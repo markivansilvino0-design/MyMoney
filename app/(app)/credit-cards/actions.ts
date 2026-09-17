@@ -174,7 +174,7 @@ export async function createCreditCardActivity(formData: FormData) {
     activity_type: activityType,
     account_id: activityType === "payment" ? accountId : null,
     category_id: categoryId,
-    owner_id: activityType === "payment" ? null : ownerId,
+    owner_id: ownerId,
     amount,
     description,
     need_want: expenseLike && ["need", "want"].includes(needWant ?? "") ? needWant : null,
@@ -183,6 +183,33 @@ export async function createCreditCardActivity(formData: FormData) {
   });
   if (error) fail(error.message, back);
   redirect(`${back}?success=Card%20activity%20saved.`);
+}
+
+export async function updateCreditCardPaymentOwner(formData: FormData) {
+  const { supabase } = await session();
+  const cardId = text(formData, "credit_card_id");
+  const id = text(formData, "id");
+  const ownerId = optionalText(formData, "owner_id");
+  const back = `/credit-cards/${cardId}`;
+
+  const { data: row } = await supabase
+    .from("credit_card_transactions")
+    .select("id,activity_type")
+    .eq("id", id)
+    .eq("credit_card_id", cardId)
+    .maybeSingle();
+
+  if (!row || row.activity_type !== "payment") fail("Credit-card payment not found.", back);
+  if (ownerId && !(await owns(supabase, "owners", ownerId))) fail("Choose a valid payment owner.", back);
+
+  const { error } = await supabase
+    .from("credit_card_transactions")
+    .update({ owner_id: ownerId })
+    .eq("id", id)
+    .eq("credit_card_id", cardId);
+
+  if (error) fail(error.message, back);
+  redirect(`${back}?success=Payment%20owner%20updated.`);
 }
 
 export async function deleteCreditCardActivity(formData: FormData) {
