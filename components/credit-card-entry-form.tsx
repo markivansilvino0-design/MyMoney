@@ -68,7 +68,10 @@ export function CreditCardEntryForm({
         <div className="field"><label htmlFor="cc_amount">Amount</label><input id="cc_amount" name="amount" type="number" min="0.01" step="0.01" placeholder="0.00" required /></div>
 
         {type === "payment" ? (
-          <div className="field"><label htmlFor="cc_account_id">Pay from account</label><select id="cc_account_id" name="account_id" defaultValue={accounts[0]?.id ?? ""} required><option value="" disabled>Select account</option>{accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</select></div>
+          <>
+            <div className="field"><label htmlFor="cc_account_id">Pay from account</label><select id="cc_account_id" name="account_id" defaultValue={accounts[0]?.id ?? ""} required><option value="" disabled>Select account</option>{accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</select></div>
+            <div className="field"><label htmlFor="cc_payment_owner_id">Paid by / Owner of payment</label><select id="cc_payment_owner_id" name="owner_id" defaultValue={defaultOwner}><option value="">Unassigned</option>{owners.map((owner) => <option key={owner.id} value={owner.id}>{owner.name}</option>)}</select></div>
+          </>
         ) : (
           <>
             <div className="field"><label htmlFor="cc_category_id">Category{type === "refund" ? " (optional)" : ""}</label><select id="cc_category_id" name="category_id" value={categoryId} onChange={(event) => setCategoryId(event.target.value)} required={type !== "refund"}><option value="">{type === "refund" ? "No category" : "Select category"}</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></div>
