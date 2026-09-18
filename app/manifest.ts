@@ -8,23 +8,23 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: "/",
     scope: "/",
     display: "standalone",
-    background_color: "#f4f7fb",
-    theme_color: "#3567e9",
+    background_color: "#061b4f",
+    theme_color: "#0b5cff",
     icons: [
       {
-        src: "/icon-192.png",
+        src: "/mymoney-icon-v20260918-192.png",
         sizes: "192x192",
         type: "image/png",
         purpose: "any",
       },
       {
-        src: "/icon-512.png",
+        src: "/mymoney-icon-v20260918-512.png",
         sizes: "512x512",
         type: "image/png",
         purpose: "any",
       },
       {
-        src: "/icon-maskable-512.png",
+        src: "/mymoney-icon-v20260918-maskable-512.png",
         sizes: "512x512",
         type: "image/png",
         purpose: "maskable",
